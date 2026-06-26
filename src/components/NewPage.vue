@@ -1,7 +1,7 @@
 <template>
   <div class="new-page">
     <div class="new-page-content">
-      <h1>Markdown Printer</h1>
+      <span class="title">Markdown Printer</span>
 
       <div
         class="drop-area"
@@ -167,19 +167,27 @@ function formatDate(timestamp: number): string {
   align-items: center;
   justify-content: center;
   background: var(--bg-primary);
+  overflow: scroll;
+  padding-top: 60px;
 }
 
 .new-page-content {
+  display: flex;
+  flex-direction: column;
   text-align: center;
+  width: 100%;
   max-width: 800px;
-  width: 80vw;
-  padding: 40px;
+  padding: 24px 16px;
 }
 
-h1 {
-  font-size: 28px;
+.title {
+  width: 100%;
+  font-size: 48px;
   margin-bottom: 28px;
+  text-align: center;
   color: var(--text-primary);
+  opacity: 0.85;
+  user-select: none;
 }
 
 .drop-area {
@@ -249,6 +257,7 @@ h1 {
   align-items: center;
   justify-content: space-between;
   margin-bottom: 10px;
+  user-select: none;
 }
 
 .history-header h2 {
@@ -256,14 +265,19 @@ h1 {
   margin: 0;
   color: var(--text-primary);
   opacity: 0.7;
+  user-select: none;
 }
 
 .history-list {
   display: flex;
   flex-direction: column;
   gap: 4px;
-  max-height: 280px;
+  max-height: 220px;
   overflow-y: auto;
+  padding: 4px;
+  box-sizing: border-box;
+  border: 2px solid var(--border-color);
+  border-radius: 10px;
 }
 
 .history-item {

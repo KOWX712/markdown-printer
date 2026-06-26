@@ -1,6 +1,7 @@
 <template>
   <div class="tab-bar">
     <div class="tabs-container" @dblclick="handleContainerDblClick">
+      <img :src="faviconUrl" alt="Markdown Printer" class="tabs-favicon" />
       <TransitionGroup name="tab" tag="div" class="tabs-inner">
         <TabItem
           v-for="tab in tabs"
@@ -29,7 +30,10 @@
 
     <Dialog v-model:visible="showAbout" header="About" modal :closable="true" :style="{ minWidth: '420px', maxWidth: '90vw' }">
       <div class="about-content">
-        <h2 class="about-title">Markdown Printer</h2>
+        <div class="about-header">
+          <img :src="faviconUrl" alt="Markdown Printer" class="about-favicon" />
+          <h2 class="about-title">Markdown Printer</h2>
+        </div>
         <p class="about-desc">A paged markdown previewer that brings markdown to real-world paper. Write in markdown, preview with pagination, and print or export to PDF — exactly as it will appear on paper.</p>
         <p class="about-license">Released under the Apache 2.0 License.</p>
         <div class="about-actions">
@@ -53,6 +57,7 @@ import type { Tab } from '../utils/types'
 import TabItem from './TabItem.vue'
 import { Plus, Sun, Moon, Monitor, Info, ExternalLink, Shield } from '@lucide/vue'
 import Dialog from 'primevue/dialog'
+import faviconUrl from '../../public/favicon.svg?url'
 
 defineProps<{
   tabs: Tab[]
@@ -193,6 +198,13 @@ function toggleTheme() {
   background: var(--border-color);
 }
 
+.tabs-favicon {
+  width: 32px;
+  height: 32px;
+  padding: 0 4px;
+  box-sizing: content-box;
+}
+
 /* Tab transition animations */
 .tab-enter-active {
   transition: all 0.2s ease-out;
@@ -239,9 +251,20 @@ function toggleTheme() {
   max-width: 640px;
 }
 
+.about-header {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.about-favicon {
+  width: 64px;
+  height: 64px;
+}
+
 .about-title {
-  font-size: 20px;
-  font-weight: 700;
+  font-size: 32px;
+  font-weight: 400;
   margin: 0;
   color: var(--text-primary);
 }
