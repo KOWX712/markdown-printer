@@ -1,0 +1,215 @@
+import { ref } from 'vue'
+import type { MarginConfig } from '../utils/types'
+import { PAGE_SIZES } from '../utils/constants'
+import { getAllStoredFonts } from '../utils/storage'
+import { fontFamilyCSS } from '../utils/css'
+
+const FONT_LOCAL_CONFIG: Record<string, { pkg: string; weights: number[] }> = {
+  'Open Sans': { pkg: 'open-sans', weights: [400, 600, 700] },
+  'Roboto': { pkg: 'roboto', weights: [400, 600, 700] },
+  'Montserrat': { pkg: 'montserrat', weights: [400, 600, 700] },
+  'Inter': { pkg: 'inter', weights: [400, 600, 700] },
+  'Lora': { pkg: 'lora', weights: [400, 700] },
+  'Lato': { pkg: 'lato', weights: [400, 700] },
+  'Source Code Pro': { pkg: 'source-code-pro', weights: [400, 700] },
+}
+
+function getLocalFontCSS(font: string): string {
+  const config = FONT_LOCAL_CONFIG[font]
+  if (!config) return ''
+  return config.weights.map(w =>
+    `@font-face { font-family: '${font}'; font-style: normal; font-weight: ${w}; src: url('/vendor/fonts/${config.pkg}/files/${config.pkg}-latin-${w}-normal.woff2') format('woff2'); }`
+  ).join('\n')
+}
+
+function blobToDataUri(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(reader.result as string)
+    reader.onerror = () => reject(reader.error)
+    reader.readAsDataURL(blob)
+  })
+}
+
+function getFormatFromMime(type: string): string {
+  if (type.includes('woff2')) return 'woff2'
+  if (type.includes('woff')) return 'woff'
+  if (type.includes('truetype') || type.includes('ttf')) return 'truetype'
+  if (type.includes('opentype') || type.includes('otf')) return 'opentype'
+  return 'woff2'
+}
+
+async function getFontCSS(font: string): Promise<string> {
+  if (font.startsWith('Custom-')) {
+    const storedFonts = await getAllStoredFonts()
+    const stored = storedFonts.find(f => f.family === font)
+    if (stored) {
+      const dataUri = await blobToDataUri(stored.blob)
+      const format = getFormatFromMime(stored.blob.type)
+      return `@font-face { font-family: '${font}'; src: url('${dataUri}') format('${format}'); }`
+    }
+    return ''
+  }
+
+  return getLocalFontCSS(font)
+}
+
+async function waitForStylesheets(doc: Document): Promise<void> {
+  const links = Array.from(doc.querySelectorAll('link[rel="stylesheet"]'))
+  if (links.length === 0) return Promise.resolve()
+  return Promise.all(links.map(el => {
+    const link = el as HTMLLinkElement
+    return new Promise<void>(resolve => {
+      if (link.sheet) { resolve(); return }
+      link.onload = () => resolve()
+      link.onerror = () => resolve()
+    })
+  })).then(() => undefined)
+}
+
+export function usePDF() {
+  const isGenerating = ref(false)
+  const error = ref<string | null>(null)
+
+  function getExplicitPageSize(pageSize: string, orientation: 'portrait' | 'landscape'): string {
+    const size = PAGE_SIZES.find(p => p.name === pageSize)
+    if (!size) return orientation === 'landscape' ? '297mm 210mm' : '210mm 297mm'
+
+    const w = size.width
+    const h = size.height
+    return orientation === 'landscape' ? `${h} ${w}` : `${w} ${h}`
+  }
+
+  async function download(
+    renderedHtml: string,
+    pageSize: string = 'A4',
+    margin: MarginConfig = { top: '1in', right: '0.75in', bottom: '1in', left: '0.75in' },
+    orientation: 'portrait' | 'landscape' = 'portrait',
+    font: string = 'Open Sans',
+    fontSize: number = 14,
+    contentScale: number = 1.0,
+    rtl: boolean = false,
+  ) {
+    isGenerating.value = true
+    error.value = null
+
+    let iframe: HTMLIFrameElement | null = null
+
+    // Safety fallback: reset isGenerating if beforeprint never fires
+    const safetyTimer = setTimeout(() => {
+      isGenerating.value = false
+    }, 30000)
+
+    try {
+      iframe = document.createElement('iframe')
+      iframe.style.cssText = 'position:fixed;top:-9999px;left:-9999px;width:0;height:0;border:none'
+      document.body.appendChild(iframe)
+
+      const explicitSize = getExplicitPageSize(pageSize, orientation)
+      const marginStr = `${margin.top} ${margin.right} ${margin.bottom} ${margin.left}`
+      const fontCSS = await getFontCSS(font)
+      const fontValue = fontFamilyCSS(font)
+      const dirAttr = rtl ? ' dir="rtl"' : ''
+      const bodyDirCSS = rtl ? 'direction: rtl;' : ''
+      const effectiveFontSize = Math.round(fontSize * contentScale * 100) / 100
+
+      const css = `
+        ${fontCSS}
+
+        @page {
+          size: ${explicitSize};
+          margin: ${marginStr};
+        }
+
+        body {
+          font-family: ${fontValue}, sans-serif;
+          font-size: ${effectiveFontSize}px;
+          color: #000;
+          background: white;
+          padding: 0;
+          margin: 0;
+          ${bodyDirCSS}
+        }
+
+        .markdown-body {
+          font-family: inherit;
+          font-size: inherit;
+          box-sizing: border-box;
+          padding: 0;
+        }
+
+        .markdown-body table,
+        .markdown-body :has(> pre),
+        .markdown-body :has(> code),
+        .markdown-body :has(> blockquote) {
+          break-inside: avoid;
+        }
+
+        [dir="rtl"].markdown-body ul,
+        [dir="rtl"].markdown-body ol {
+          padding-left: unset;
+          padding-right: 2em;
+          direction: rtl;
+        }
+
+        div[data-page-break="true"] {
+          page-break-after: always;
+        }
+
+        * {
+          -webkit-print-color-adjust: exact;
+          print-color-adjust: exact;
+        }
+      `
+
+      const doc = iframe.contentDocument!
+      doc.open()
+      doc.write(`<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <link rel="stylesheet" href="/vendor/github-markdown-light.css">
+  <link rel="stylesheet" href="/vendor/katex.min.css">
+  <link rel="stylesheet" href="/vendor/github.min.css">
+  <style>${css}</style>
+</head>
+<body${dirAttr}>
+  <div class="markdown-body">${renderedHtml}</div>
+</body>
+</html>`)
+      doc.close()
+      await waitForStylesheets(doc)
+
+      iframe.contentWindow!.addEventListener('beforeprint', () => {
+        clearTimeout(safetyTimer)
+        isGenerating.value = false
+      }, { once: true })
+
+      iframe.contentWindow!.addEventListener('afterprint', () => {
+        setTimeout(() => {
+          if (document.body.contains(iframe!)) {
+            document.body.removeChild(iframe!)
+          }
+        }, 5000)
+      }, { once: true })
+
+      iframe.contentWindow!.print()
+
+    } catch (e) {
+      clearTimeout(safetyTimer)
+      error.value = e instanceof Error ? e.message : 'Unknown error'
+      console.error('PDF print error:', error.value)
+      isGenerating.value = false
+
+      if (iframe && document.body.contains(iframe)) {
+        document.body.removeChild(iframe)
+      }
+    }
+  }
+
+  return {
+    download,
+    isGenerating,
+    error,
+  }
+}
