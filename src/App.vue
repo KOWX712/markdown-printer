@@ -292,9 +292,6 @@ function onEditorReady() {}
 function handleCloseTab(id: string) {
   newTabIds.value.delete(id)
   closeTab(id)
-  if (activeTabId.value && !getActiveTab()?.content) {
-    newTabIds.value.add(activeTabId.value)
-  }
 }
 </script>
 

@@ -164,11 +164,9 @@ function formatDate(timestamp: number): string {
 .new-page {
   height: 100%;
   display: flex;
-  align-items: center;
   justify-content: center;
   background: var(--bg-primary);
   overflow: scroll;
-  padding-top: 60px;
 }
 
 .new-page-content {
@@ -177,7 +175,10 @@ function formatDate(timestamp: number): string {
   text-align: center;
   width: 100%;
   max-width: 800px;
-  padding: 24px 16px;
+  padding: 64px 16px;
+  box-sizing: border-box;
+  margin-top: auto;
+  margin-bottom: auto;
 }
 
 .title {

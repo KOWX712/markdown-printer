@@ -58,7 +58,7 @@ import TabItem from './TabItem.vue'
 import { Plus, Sun, Moon, Monitor, Info, ExternalLink, Shield } from '@lucide/vue'
 import Dialog from 'primevue/dialog'
 import Button from 'primevue/button'
-import faviconUrl from '../../public/favicon.svg?url'
+import faviconUrl from '/favicon.svg?url'
 
 defineProps<{
   tabs: Tab[]
