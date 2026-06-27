@@ -17,8 +17,9 @@ const FONT_LOCAL_CONFIG: Record<string, { pkg: string; weights: number[] }> = {
 function getLocalFontCSS(font: string): string {
   const config = FONT_LOCAL_CONFIG[font]
   if (!config) return ''
+  const base = import.meta.env.BASE_URL
   return config.weights.map(w =>
-    `@font-face { font-family: '${font}'; font-style: normal; font-weight: ${w}; src: url('/vendor/fonts/${config.pkg}/files/${config.pkg}-latin-${w}-normal.woff2') format('woff2'); }`
+    `@font-face { font-family: '${font}'; font-style: normal; font-weight: ${w}; src: url('${base}vendor/fonts/${config.pkg}/files/${config.pkg}-latin-${w}-normal.woff2') format('woff2'); }`
   ).join('\n')
 }
 
@@ -65,6 +66,21 @@ async function waitForStylesheets(doc: Document): Promise<void> {
       link.onerror = () => resolve()
     })
   })).then(() => undefined)
+}
+
+function isAndroid(): boolean {
+  return /Android/i.test(navigator.userAgent)
+}
+
+async function waitForPagedjs(win: Window): Promise<void> {
+  if (win.__pagedReady) return
+  await new Promise<void>((resolve) => {
+    const check = () => {
+      if (win.__pagedReady) resolve()
+      else setTimeout(check, 50)
+    }
+    check()
+  })
 }
 
 export function usePDF() {
@@ -162,23 +178,56 @@ export function usePDF() {
         }
       `
 
-      const doc = iframe.contentDocument!
-      doc.open()
-      doc.write(`<!DOCTYPE html>
+      const base = import.meta.env.BASE_URL
+
+      const htmlContent = `<!DOCTYPE html>
 <html>
 <head>
   <meta charset="utf-8">
-  <link rel="stylesheet" href="/vendor/github-markdown-light.css">
-  <link rel="stylesheet" href="/vendor/katex.min.css">
-  <link rel="stylesheet" href="/vendor/github.min.css">
+  <link rel="stylesheet" href="${base}vendor/github-markdown-light.css">
+  <link rel="stylesheet" href="${base}vendor/katex.min.css">
+  <link rel="stylesheet" href="${base}vendor/github.min.css">
   <style>${css}</style>
+  <script>
+    window.PagedConfig = {
+      after: function() { window.__pagedReady = true; }
+    };
+  </script>
+  <script src="${base}vendor/paged.polyfill.js"></script>
 </head>
 <body${dirAttr}>
   <div class="markdown-body">${renderedHtml}</div>
 </body>
-</html>`)
+</html>`
+
+      // Android Chrome: use window.open() to bypass iframe print bug
+      // (Chromium #41222716 - iframe.contentWindow.print() prints parent on Android)
+      if (isAndroid()) {
+        const printWindow = window.open('', '_blank')
+        if (!printWindow) {
+          throw new Error('Failed to open print window. Please allow popups for this site.')
+        }
+
+        printWindow.document.write(htmlContent)
+        printWindow.document.close()
+        await waitForStylesheets(printWindow.document)
+        await waitForPagedjs(printWindow)
+
+        printWindow.addEventListener('beforeprint', () => {
+          clearTimeout(safetyTimer)
+          isGenerating.value = false
+        }, { once: true })
+
+        printWindow.print()
+        return
+      }
+
+      const doc = iframe.contentDocument!
+      doc.open()
+      doc.write(htmlContent)
       doc.close()
       await waitForStylesheets(doc)
+      await waitForPagedjs(iframe.contentWindow!)
 
       iframe.contentWindow!.addEventListener('beforeprint', () => {
         clearTimeout(safetyTimer)
