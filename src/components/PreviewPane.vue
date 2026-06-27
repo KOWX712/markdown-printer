@@ -171,6 +171,7 @@ const pageStyle = computed(() => {
 
 defineExpose({
   container: previewContainer,
+  assembledHtml: computed(() => pages.value.map(p => p.elements.join('')).join('')),
 })
 </script>
 
@@ -214,5 +215,30 @@ defineExpose({
   padding-left: unset;
   padding-right: 2em;
   direction: rtl;
+}
+
+.markdown-body table {
+  display: table !important;
+  width: 100% !important;
+  table-layout: fixed !important;
+}
+
+.markdown-body table td,
+.markdown-body table th {
+  overflow-wrap: break-word;
+  word-wrap: break-word;
+}
+
+.markdown-body table td,
+.markdown-body table th {
+  overflow-wrap: break-word;
+  word-wrap: break-word;
+}
+
+.markdown-body pre,
+.markdown-body pre code {
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  word-wrap: break-word;
 }
 </style>

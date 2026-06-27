@@ -5,7 +5,6 @@
       <span class="separator">|</span>
       <span class="stat">{{ charCount }} chars</span>
     </div>
-    <span class="separator" v-show="viewMode !== 'preview'">|</span>
     <div class="footer-spacer"></div>
     <div class="footer-right">
       <div class="scale-control" v-show="viewMode !== 'editor'">

@@ -8,6 +8,18 @@
       @click.stop
     >
       <div class="icon-row">
+        <Button severity="contrast" size="small" variant="outlined" @click="handleCopy" title="Copy">
+          <template #icon>
+            <Copy :size="16" />
+          </template>
+        </Button>
+        <Button severity="contrast" size="small" variant="outlined" @click="handlePaste" title="Paste">
+          <template #icon>
+            <ClipboardPaste :size="16" />
+          </template>
+        </Button>
+      </div>
+      <div class="icon-row">
         <Button :severity="activeFormats?.bold ? 'info' : 'contrast'" size="small" variant="outlined" @click="handleAction('bold')" title="Bold">
           <template #icon>
             <Bold :size="16" />
@@ -139,6 +151,8 @@ import {
   TextAlignStart,
   TextAlignCenter,
   TextAlignEnd,
+  Copy,
+  ClipboardPaste,
 } from '@lucide/vue'
 import Divider from 'primevue/divider'
 
@@ -235,6 +249,45 @@ function insertTable(rows: number, cols: number) {
 function handleAction(type: string) {
   emit('action', type, props.selectedText)
   emit('close')
+}
+
+function handleCopy() {
+  const text = props.selectedText
+  if (!text) return
+  emit('close')
+
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).catch(() => {
+      fallbackCopy(text)
+    })
+  } else {
+    fallbackCopy(text)
+  }
+}
+
+function fallbackCopy(text: string) {
+  const textarea = document.createElement('textarea')
+  textarea.value = text
+  textarea.style.position = 'fixed'
+  textarea.style.opacity = '0'
+  document.body.appendChild(textarea)
+  textarea.select()
+  document.execCommand('copy')
+  document.body.removeChild(textarea)
+}
+
+function handlePaste() {
+  emit('close')
+
+  if (navigator.clipboard && navigator.clipboard.readText) {
+    navigator.clipboard.readText().then(text => {
+      emit('action', 'paste', text)
+    }).catch(() => {
+      emit('action', 'focus-editor')
+    })
+  } else {
+    emit('action', 'focus-editor')
+  }
 }
 
 function handleClickOutside(e: MouseEvent) {

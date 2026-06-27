@@ -14,7 +14,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { ref, watch, onMounted, onUnmounted } from 'vue'
 import { useEditor } from '../composables/useEditor'
 import ContextMenu from './ContextMenu.vue'
 
@@ -84,6 +84,21 @@ const lineFrom = ref(0)
 const lineTo = ref(0)
 const wasLineFallback = ref(false)
 
+// Selection change detection for mobile selection handles
+let selectionChangeTimer: ReturnType<typeof setTimeout> | null = null
+let contextMenuShowTimer: ReturnType<typeof setTimeout> | null = null
+
+function handleSelectionChange() {
+  if (!contextMenuVisible.value) return
+
+  contextMenuVisible.value = false
+
+  if (selectionChangeTimer) clearTimeout(selectionChangeTimer)
+  selectionChangeTimer = setTimeout(() => {
+    selectionChangeTimer = null
+  }, 1000)
+}
+
 function detectActiveFormats(
   text: string,
   effectiveText: string,
@@ -147,6 +162,21 @@ function detectActiveFormats(
 }
 
 function handleContextMenu(e: MouseEvent) {
+  if (!editorView.value) return
+
+  if (selectionChangeTimer) {
+    if (contextMenuShowTimer) clearTimeout(contextMenuShowTimer)
+    contextMenuShowTimer = setTimeout(() => {
+      showContextMenu(e)
+      contextMenuShowTimer = null
+    }, 1000)
+    return
+  }
+
+  showContextMenu(e)
+}
+
+function showContextMenu(e: MouseEvent) {
   if (!editorView.value) return
 
   const state = editorView.value.state
@@ -450,6 +480,12 @@ function handleContextAction(type: string, _text?: string) {
       selectionTo = workFrom + 3 + 'col1'.length
       break
     }
+    case 'paste': {
+      insert = _text || ''
+      selectionFrom = workFrom + insert.length
+      selectionTo = workFrom + insert.length
+      break
+    }
     case 'alignLeft':
     case 'alignCenter':
     case 'alignRight': {
@@ -481,6 +517,10 @@ function handleContextAction(type: string, _text?: string) {
       selectionTo = workFrom + insert.length
       break
     }
+    case 'focus-editor': {
+      editorView.value?.focus()
+      return
+    }
   }
 
   editorView.value.dispatch({
@@ -508,6 +548,17 @@ setTimeout(() => {
     emit('editor-ready', editorView.value)
   }
 }, 100)
+
+// Selection change listener for mobile drag detection
+onMounted(() => {
+  document.addEventListener('selectionchange', handleSelectionChange)
+})
+
+onUnmounted(() => {
+  if (selectionChangeTimer) clearTimeout(selectionChangeTimer)
+  if (contextMenuShowTimer) clearTimeout(contextMenuShowTimer)
+  document.removeEventListener('selectionchange', handleSelectionChange)
+})
 </script>
 
 <style scoped>

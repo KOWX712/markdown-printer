@@ -161,6 +161,32 @@ export function usePDF() {
           break-inside: avoid;
         }
 
+        .markdown-body table {
+          display: table;
+          width: 100%;
+          table-layout: fixed;
+        }
+
+        .markdown-body table td,
+        .markdown-body table th {
+          overflow-wrap: break-word;
+          word-wrap: break-word;
+        }
+        }
+
+        .markdown-body table td,
+        .markdown-body table th {
+          overflow-wrap: break-word;
+          word-wrap: break-word;
+        }
+
+        .markdown-body pre,
+        .markdown-body pre code {
+          white-space: pre-wrap;
+          overflow-wrap: break-word;
+          word-wrap: break-word;
+        }
+
         [dir="rtl"].markdown-body ul,
         [dir="rtl"].markdown-body ol {
           padding-left: unset;

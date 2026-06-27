@@ -40,13 +40,73 @@ export function usePagination(
     return parseFloat(val) || 0
   }
 
-function getElementHeight(el: HTMLElement): number {
-  const rect = el.getBoundingClientRect()
-  const style = window.getComputedStyle(el)
-  const marginTop = parseFloat(style.marginTop) || 0
-  const marginBottom = parseFloat(style.marginBottom) || 0
-  return rect.height + marginTop + marginBottom
-}
+  function getElementHeight(el: HTMLElement): number {
+    const rect = el.getBoundingClientRect()
+    const style = window.getComputedStyle(el)
+    const marginTop = parseFloat(style.marginTop) || 0
+    const marginBottom = parseFloat(style.marginBottom) || 0
+    return rect.height + marginTop + marginBottom
+  }
+
+  function splitTable(tableEl: HTMLElement, maxHeight: number, contentWidth: number, fontCSS: string, fontSizePx: number): string[] {
+    const thead = tableEl.querySelector('thead')
+    const theadHtml = thead ? thead.outerHTML : ''
+    const tbody = tableEl.querySelector('tbody')
+    const rows = tbody
+      ? Array.from(tbody.querySelectorAll(':scope > tr'))
+      : Array.from(tableEl.querySelectorAll(':scope > tr'))
+    const tableAttrs = Array.from(tableEl.attributes)
+      .map(a => ` ${a.name}="${a.value}"`)
+      .join('')
+
+    if (rows.length === 0) return [tableEl.outerHTML]
+
+    const measureDiv = document.createElement('div')
+    measureDiv.style.cssText =
+      'position:absolute;left:-9999px;top:0;visibility:hidden;pointer-events:none;'
+    document.body.appendChild(measureDiv)
+
+    const wrapper = document.createElement('div')
+    wrapper.className = 'markdown-body'
+    wrapper.style.width = `${contentWidth}px`
+    wrapper.style.fontFamily = fontCSS
+    wrapper.style.fontSize = `${fontSizePx}px`
+    wrapper.style.lineHeight = '1.5'
+    measureDiv.appendChild(wrapper)
+
+    const chunks: string[] = []
+    let chunkRows: Element[] = []
+
+    function buildTable(rows: Element[]): string {
+      const tbodyHtml = rows.length > 0
+        ? `<tbody>${rows.map(r => r.outerHTML).join('')}</tbody>`
+        : ''
+      return `<table${tableAttrs}>${theadHtml}${tbodyHtml}</table>`
+    }
+
+    function measureChunk(rows: Element[]): number {
+      wrapper.innerHTML = buildTable(rows)
+      const table = wrapper.firstElementChild as HTMLElement
+      if (!table) return 0
+      table.style.display = 'table'
+      table.style.width = '100%'
+      table.style.tableLayout = 'fixed'
+      return getElementHeight(table)
+    }
+
+    for (const row of rows) {
+      chunkRows.push(row)
+      if (measureChunk(chunkRows) > maxHeight && chunkRows.length > 1) {
+        chunkRows.pop()
+        chunks.push(buildTable(chunkRows))
+        chunkRows = [row]
+      }
+    }
+    if (chunkRows.length > 0) chunks.push(buildTable(chunkRows))
+
+    document.body.removeChild(measureDiv)
+    return chunks
+  }
 
   function splitIntoPages() {
     const container = getMeasureContainer()
@@ -70,6 +130,12 @@ function getElementHeight(el: HTMLElement): number {
     container.style.margin = '0'
     container.innerHTML = html.value
 
+    container.querySelectorAll('table').forEach(t => {
+      t.style.display = 'table'
+      t.style.width = '100%'
+      t.style.tableLayout = 'fixed'
+    })
+
     const children = Array.from(container.children) as HTMLElement[]
     if (children.length === 0) {
       pages.value = [{ index: 0, elements: [] }]
@@ -82,8 +148,6 @@ function getElementHeight(el: HTMLElement): number {
     let currentPageElements: string[] = []
     let currentHeight = 0
     let prevMarginBottom = 0
-
-    const ATOMIC_TAGS = new Set(['PRE', 'TABLE', 'BLOCKQUOTE'])
 
     for (const child of children) {
       const isPageBreak = child.dataset?.pageBreak === 'true'
@@ -104,7 +168,6 @@ function getElementHeight(el: HTMLElement): number {
       const childMarginBottom = parseFloat(style.marginBottom) || 0
       const collapsedMargin = Math.min(prevMarginBottom, childMarginTop)
       const effectiveHeight = childHeight - collapsedMargin
-      const isAtomic = ATOMIC_TAGS.has(child.tagName)
 
       // At a page break, the browser print engine truncates the last element's 
       // marginBottom to 0. Account for this in the overflow check so the preview 
@@ -121,11 +184,25 @@ function getElementHeight(el: HTMLElement): number {
         prevMarginBottom = 0
       }
 
-      if (isAtomic && childHeight > maxPageHeight && currentPageElements.length > 0) {
-        result.push({ index: result.length, elements: currentPageElements })
-        currentPageElements = []
-        currentHeight = 0
-        prevMarginBottom = 0
+      if (child.tagName === 'TABLE' && childHeight > maxPageHeight) {
+        if (currentPageElements.length > 0) {
+          result.push({ index: result.length, elements: currentPageElements })
+          currentPageElements = []
+          currentHeight = 0
+          prevMarginBottom = 0
+        }
+
+        const chunks = splitTable(child as HTMLElement, maxPageHeight, contentWidth, `${fontFamilyCSS(font.value)}, sans-serif`, fontSize.value)
+        for (let i = 0; i < chunks.length; i++) {
+          currentPageElements.push(chunks[i])
+          if (i < chunks.length - 1) {
+            result.push({ index: result.length, elements: currentPageElements })
+            currentPageElements = []
+            currentHeight = 0
+            prevMarginBottom = 0
+          }
+        }
+        continue
       }
 
       currentPageElements.push(child.outerHTML)

@@ -36,7 +36,7 @@
         @undo="editorRef?.undo()"
         @redo="editorRef?.redo()"
         @insert-page-break="insertPageBreak"
-        @download-pdf="() => downloadPDF(renderedHtml, settings.pageSize, settings.margin, settings.orientation, settings.font, settings.fontSize, settings.contentScale, settings.rtl)"
+        @download-pdf="() => downloadPDF(previewRef?.assembledHtml || renderedHtml, settings.pageSize, settings.margin, settings.orientation, settings.font, settings.fontSize, settings.contentScale, settings.rtl)"
       />
 
       <NewPage
