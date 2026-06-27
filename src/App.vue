@@ -158,7 +158,6 @@ const settings = ref<EditorSettings>({
 
 // Load saved settings
 onMounted(() => {
-  // Register the initial empty tab as "new" so it shows NewPage
   if (activeTabId.value && !getActiveTab()?.content) {
     newTabIds.value.add(activeTabId.value)
   }
@@ -291,7 +290,11 @@ function onEditorReady() {}
 
 function handleCloseTab(id: string) {
   newTabIds.value.delete(id)
+  const wasLastTab = tabs.value.length === 1
   closeTab(id)
+  if (wasLastTab && activeTabId.value) {
+    newTabIds.value.add(activeTabId.value)
+  }
 }
 </script>
 
