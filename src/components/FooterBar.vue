@@ -183,6 +183,7 @@ function decrement() {
   height: 6px;
   border-radius: 50%;
   display: inline-block;
+  flex-shrink: 0; 
 }
 
 .ai-dot.off {

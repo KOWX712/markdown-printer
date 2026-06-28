@@ -34,6 +34,8 @@
         </Button>
       </div>
 
+      <span class="separator" v-if="viewMode === 'split'"></span>
+
       <div class="toolbar-center" v-show="viewMode !== 'editor'">
         <MarginPicker
           :model-value="margin"
@@ -196,7 +198,6 @@ function resetContentScale() {
 
 .toolbar-print {
   flex-shrink: 0;
-  margin-left: auto;
 }
 
 .toolbar-left,
