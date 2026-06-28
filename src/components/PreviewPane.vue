@@ -20,11 +20,12 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, toRef, onMounted, onUnmounted } from 'vue'
+import { computed, ref, toRef, onMounted, onUnmounted, watch } from 'vue'
 import { fontFamilyCSS } from '../utils/css'
 import { PAGE_SIZES, getScaleRange } from '../utils/constants'
 import type { MarginConfig } from '../utils/types'
 import { usePagination } from '../composables/usePagination'
+import { useImages } from '../composables/useImages'
 
 const props = defineProps<{
   html: string
@@ -43,6 +44,8 @@ const emit = defineEmits<{
   'preview-click': [event: MouseEvent]
   'update:scale': [value: number]
 }>()
+
+const { getImageUrl, images } = useImages()
 
 const previewContainer = ref<HTMLElement | null>(null)
 
@@ -118,7 +121,30 @@ const pageHeight = computed(() => {
   return parseFloat(h) * MM_TO_PX
 })
 
-const htmlRef = toRef(props, 'html')
+const resolvedHtml = ref(props.html)
+
+watch(
+  [() => props.html, images],
+  async () => {
+    let html = props.html
+    const imgRegex = /<img\s+([^>]*?)src="\.\/([^"]+)"([^>]*?)>/g
+    const matches = [...html.matchAll(imgRegex)]
+
+    for (const match of matches) {
+      const filename = match[2]
+      const img = images.value.find(i => i.name === filename)
+      if (img) {
+        const url = getImageUrl(img.id) || ''
+        html = html.replace(match[0], `<img ${match[1]}src="${url}"${match[3]}>`)
+      }
+    }
+
+    resolvedHtml.value = html
+  },
+  { immediate: true }
+)
+
+const htmlRef = resolvedHtml
 const scaleRef = toRef(props, 'scale')
 const pageHeightRef = pageHeight
 const pageSizeRef = toRef(props, 'pageSize')

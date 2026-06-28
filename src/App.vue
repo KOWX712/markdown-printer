@@ -119,6 +119,7 @@ import { useTabs } from './composables/useTabs'
 import { useMarkdown } from './composables/useMarkdown'
 import { useScrollSync } from './composables/useScrollSync'
 import { usePDF } from './composables/usePDF'
+import { useImages } from './composables/useImages'
 import { loadSettings, saveSettings, loadLlmConfig, isLlmEnabled } from './utils/storage'
 import { PAGE_SIZES, getScaleRange, getContentScaleFactor } from './utils/constants'
 import type { EditorSettings, Tab } from './utils/types'
@@ -129,6 +130,7 @@ const {
   updateTabContent, getActiveTab,
   replaceTabWithHistory,
 } = useTabs()
+const { loadImages } = useImages()
 
 // Active tab content
 const activeTab = computed(() => getActiveTab())
@@ -169,6 +171,8 @@ const settings = ref<EditorSettings>({
 
 // Load saved settings
 onMounted(async () => {
+  await loadImages()
+
   if (activeTabId.value && !getActiveTab()?.content) {
     newTabIds.value.add(activeTabId.value)
   }

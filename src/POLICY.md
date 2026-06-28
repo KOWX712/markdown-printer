@@ -27,7 +27,7 @@ This data is handled by our hosting provider in accordance with their respective
 
 To provide features like session persistence and font uploads, we use browser-native storage technologies:
 
-* **IndexedDB:** Used to store tab history (markdown content) and uploaded custom fonts. This data never leaves your device.
+* **IndexedDB:** Used to store tab history (markdown content), uploaded custom fonts, and uploaded images. This data never leaves your device.
 * **localStorage:** Used to remember your editor preferences such as page size, font selection, margin settings, theme preference, view mode, and LLM API keys.
 * **sessionStorage:** Used to maintain your current editing session and active tab state.
 
@@ -41,6 +41,7 @@ All locally stored data is used solely to:
 * Remember your display preferences across sessions.
 * Provide access to previously opened documents via the history feature.
 * Retain custom fonts you have uploaded for use in document rendering.
+* Store uploaded images for use in your documents. Images are stored locally in your browser and are never transmitted or shared.
 * Store your LLM API key for AI autocomplete (only sent directly from your browser to the API provider you configure).
 
 ## 5. Third-Party Services

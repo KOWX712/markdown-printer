@@ -48,6 +48,20 @@ export function usePagination(
     return rect.height + marginTop + marginBottom
   }
 
+  function waitForImages(container: HTMLElement): Promise<void> {
+    const images = Array.from(container.querySelectorAll('img'))
+    const pending = images.filter(img => !img.complete)
+    if (pending.length === 0) return Promise.resolve()
+    return Promise.all(
+      pending.map(img =>
+        new Promise<void>(resolve => {
+          img.onload = () => resolve()
+          img.onerror = () => resolve()
+        })
+      )
+    ).then(() => {})
+  }
+
   function splitTable(tableEl: HTMLElement, maxHeight: number, contentWidth: number, fontCSS: string, fontSizePx: number): string[] {
     const thead = tableEl.querySelector('thead')
     const theadHtml = thead ? thead.outerHTML : ''
@@ -108,7 +122,7 @@ export function usePagination(
     return chunks
   }
 
-  function splitIntoPages() {
+  async function splitIntoPages() {
     const container = getMeasureContainer()
 
     const size = PAGE_SIZES.find(p => p.name === pageSize.value) || PAGE_SIZES[0]
@@ -129,6 +143,7 @@ export function usePagination(
     container.style.padding = '0'
     container.style.margin = '0'
     container.innerHTML = html.value
+    await waitForImages(container)
 
     container.querySelectorAll('table').forEach(t => {
       t.style.display = 'table'

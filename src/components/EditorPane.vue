@@ -1,5 +1,12 @@
 <template>
-  <div class="editor-pane" @contextmenu.prevent="handleContextMenu">
+  <div
+    class="editor-pane"
+    @contextmenu.prevent="handleContextMenu"
+    @dragover.prevent="onDragOver"
+    @dragleave.prevent="dragActive = false"
+    @drop.prevent="onDrop"
+    :class="{ 'drag-active': dragActive }"
+  >
     <div ref="editorContainer" class="editor-container"></div>
     <ContextMenu
       ref="contextMenuRef"
@@ -8,13 +15,16 @@
       @action="handleContextAction"
       @close="closeContextMenu"
     />
+    <Gallery v-model:visible="showGallery" @select="onGallerySelect" />
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, watch, onMounted, onUnmounted } from 'vue'
 import { useEditor } from '../composables/useEditor'
+import { useImages } from '../composables/useImages'
 import ContextMenu from './ContextMenu.vue'
+import Gallery from './Gallery.vue'
 
 const props = defineProps<{
   modelValue: string
@@ -35,6 +45,8 @@ const { editorView, content, selectedText, undo, redo, insertText, scrollToLine,
   (value) => emit('update:modelValue', value),
   props.softWrap
 )
+
+const { uploadImage } = useImages()
 
 watch(selectedText, (val) => {
   emit('update:selectedText', val)
@@ -82,6 +94,40 @@ const headingLevel = ref(0)
 const lineFrom = ref(0)
 const lineTo = ref(0)
 const wasLineFallback = ref(false)
+
+const dragActive = ref(false)
+
+function onDragOver(e: DragEvent) {
+  if (e.dataTransfer?.types.includes('Files')) {
+    dragActive.value = true
+  }
+}
+
+async function onDrop(e: DragEvent) {
+  dragActive.value = false
+  const files = e.dataTransfer?.files
+  if (!files || files.length === 0) return
+
+  for (const file of Array.from(files)) {
+    if (!file.type.startsWith('image/')) continue
+    const saved = await uploadImage(file)
+    if (saved) {
+      const insertText = `![${saved.name}](./${saved.name})`
+      handleContextAction('paste', insertText)
+    }
+  }
+}
+
+const showGallery = ref(false)
+
+function openGalleryDialog() {
+  showGallery.value = true
+}
+
+function onGallerySelect(filename: string) {
+  const insertText = `![${filename}](./${filename})`
+  handleContextAction('paste', insertText)
+}
 
 function detectActiveFormats(
   text: string,
@@ -497,7 +543,7 @@ function handleContextAction(type: string, _text?: string) {
     case 'table': {
       const [rows, cols] = (_text || '3x3').split('x').map(Number)
       const header = '| ' + Array.from({ length: cols }, (_, i) => `col${i + 1} `).join('| ') + '|'
-      const separator = '| ' + Array.from({ length: cols }, () => ' --- ').join('| ') + '|'
+      const separator = '| ' + Array.from({ length: cols }, () => '--- ').join('| ') + '|'
       const dataRows = Array.from({ length: Math.max(0, rows - 1) }, () => {
         return '| ' + Array.from({ length: cols }, () => 'cell ').join('| ') + '|'
       })
@@ -541,6 +587,10 @@ function handleContextAction(type: string, _text?: string) {
       selectionFrom = workFrom
       selectionTo = workFrom + insert.length
       break
+    }
+    case 'image-gallery': {
+      openGalleryDialog()
+      return
     }
     case 'focus-editor': {
       editorView.value?.focus()
@@ -608,5 +658,11 @@ setTimeout(() => {
 
 .editor-container :deep(.cm-editor) {
   height: 100%;
+}
+
+.editor-pane.drag-active {
+  outline: 2px dashed var(--accent-color);
+  outline-offset: -4px;
+  background: color-mix(in srgb, var(--accent-color) 5%, transparent);
 }
 </style>

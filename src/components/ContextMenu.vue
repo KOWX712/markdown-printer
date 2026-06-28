@@ -263,7 +263,13 @@ const items = computed<ContextMenuItem[]>(() => {
 
     // Insert items
     { label: 'Link', command: () => handleAction('link') },
-    { label: 'Image', command: () => handleAction('image') },
+    {
+      label: 'Image',
+      items: [
+        { label: 'Link', command: () => handleAction('image') },
+        { label: 'Gallery', command: () => handleAction('image-gallery') },
+      ],
+    } as ContextMenuItem,
     { label: 'Code Block', command: () => handleAction('codeBlock') },
     {
       label: 'Blockquote',

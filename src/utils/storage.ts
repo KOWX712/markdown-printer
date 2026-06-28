@@ -1,5 +1,5 @@
-import type { Tab, EditorSettings, LlmConfig } from './types'
-import { STORAGE_KEYS } from './constants'
+import type { Tab, EditorSettings, LlmConfig, StoredImage } from './types'
+import { STORAGE_KEYS, IMAGES_STORE } from './constants'
 
 export function loadTabs(): Tab[] {
   try {
@@ -40,7 +40,7 @@ export function generateTabId(): string {
 }
 
 const DB_NAME = 'markdown-printer'
-const DB_VERSION = 2
+const DB_VERSION = 3
 const TAB_HISTORY_STORE = 'tab-history'
 const FONTS_STORE = 'fonts'
 
@@ -56,6 +56,10 @@ function openDB(): Promise<IDBDatabase> {
       }
       if (!db.objectStoreNames.contains(FONTS_STORE)) {
         db.createObjectStore(FONTS_STORE, { keyPath: 'family' })
+      }
+      if (!db.objectStoreNames.contains(IMAGES_STORE)) {
+        const imagesStore = db.createObjectStore(IMAGES_STORE, { keyPath: 'id' })
+        imagesStore.createIndex('createdAt', 'createdAt', { unique: false })
       }
     }
     request.onsuccess = () => resolve(request.result)
@@ -78,7 +82,7 @@ async function getDB(): Promise<IDBDatabase> {
   dbPromise = openDB()
   try {
     const db = await dbPromise
-    if (!db.objectStoreNames.contains(TAB_HISTORY_STORE) || !db.objectStoreNames.contains(FONTS_STORE)) {
+    if (!db.objectStoreNames.contains(TAB_HISTORY_STORE) || !db.objectStoreNames.contains(FONTS_STORE) || !db.objectStoreNames.contains(IMAGES_STORE)) {
       db.close()
       dbPromise = null
       return deleteAndReopen()
@@ -208,6 +212,74 @@ export async function deleteFont(family: string): Promise<void> {
     })
   } catch (e) {
     console.error('[IDB] Failed to delete font:', e)
+  }
+}
+
+// --- Images ---
+
+export async function saveImage(image: StoredImage): Promise<void> {
+  try {
+    const db = await getDB()
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(IMAGES_STORE, 'readwrite')
+      const store = tx.objectStore(IMAGES_STORE)
+      store.put({ ...image })
+      tx.oncomplete = () => resolve()
+      tx.onerror = () => reject(tx.error)
+    })
+  } catch (e) {
+    console.error('[IDB] Failed to save image:', e)
+  }
+}
+
+export async function getImage(id: string): Promise<StoredImage | undefined> {
+  try {
+    const db = await getDB()
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(IMAGES_STORE, 'readonly')
+      const store = tx.objectStore(IMAGES_STORE)
+      const request = store.get(id)
+      request.onsuccess = () => resolve(request.result as StoredImage | undefined)
+      request.onerror = () => reject(request.error)
+    })
+  } catch (e) {
+    console.error('[IDB] Failed to get image:', e)
+    return undefined
+  }
+}
+
+export async function getAllImages(): Promise<StoredImage[]> {
+  try {
+    const db = await getDB()
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(IMAGES_STORE, 'readonly')
+      const store = tx.objectStore(IMAGES_STORE)
+      const request = store.getAll()
+      request.onsuccess = () => {
+        const images = request.result as StoredImage[]
+        images.sort((a, b) => b.createdAt - a.createdAt)
+        resolve(images)
+      }
+      request.onerror = () => reject(request.error)
+    })
+  } catch (e) {
+    console.error('[IDB] Failed to load images:', e)
+    return []
+  }
+}
+
+export async function deleteImage(id: string): Promise<void> {
+  try {
+    const db = await getDB()
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(IMAGES_STORE, 'readwrite')
+      const store = tx.objectStore(IMAGES_STORE)
+      store.delete(id)
+      tx.oncomplete = () => resolve()
+      tx.onerror = () => reject(tx.error)
+    })
+  } catch (e) {
+    console.error('[IDB] Failed to delete image:', e)
   }
 }
 

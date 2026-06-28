@@ -52,3 +52,11 @@ export interface EditorSettings {
   softWrap: boolean
   viewMode: ViewMode
 }
+
+export interface StoredImage {
+  id: string
+  name: string
+  mimeType: string
+  blob: Blob
+  createdAt: number
+}

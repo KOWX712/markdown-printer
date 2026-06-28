@@ -143,6 +143,8 @@ export const STORAGE_KEYS = {
   LLM_ENABLED: 'markdown-printer-llm-enabled',
 } as const
 
+export const IMAGES_STORE = 'images'
+
 export const MARGIN_PRESETS: Record<string, MarginConfig> = {
   moderate: { top: '1in', right: '0.75in', bottom: '1in', left: '0.75in' },
   standard: { top: '1in', right: '1.25in', bottom: '1in', left: '1.25in' },
