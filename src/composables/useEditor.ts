@@ -1,4 +1,4 @@
-import { ref, shallowRef, onMounted, onUnmounted, type Ref } from 'vue'
+import { ref, shallowRef, watch, onMounted, onUnmounted, type Ref } from 'vue'
 import { EditorView, keymap, lineNumbers, highlightActiveLine, highlightActiveLineGutter } from '@codemirror/view'
 import { EditorState, Compartment } from '@codemirror/state'
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown'
@@ -8,6 +8,7 @@ import { searchKeymap, highlightSelectionMatches } from '@codemirror/search'
 import { autocompletion, completionKeymap } from '@codemirror/autocomplete'
 import { lintKeymap } from '@codemirror/lint'
 import { ghostTextExtension } from '../plugins/ghostText'
+import { isLlmEnabled } from '../utils/storage'
 
 const lightTheme = EditorView.theme({
   '&': { backgroundColor: '#ffffff' },
@@ -44,11 +45,15 @@ function getInitialDark(): boolean {
   return getThemeForSystemPreference().dark
 }
 
+/** Shared storage for per-tab EditorState (preserves undo history across tab switches). */
+const tabStateStorage = new Map<string, EditorState>()
+
 export function useEditor(
   containerRef: Ref<HTMLElement | null>,
   initialContent: string,
   onUpdate: (content: string) => void,
-  initialSoftWrap: boolean = true
+  initialSoftWrap: boolean = true,
+  tabId?: Ref<string | null>,
 ) {
   const editorView = shallowRef<EditorView | null>(null)
   const content = ref(initialContent)
@@ -59,8 +64,9 @@ export function useEditor(
   let mediaQuery: MediaQueryList | null = null
   let handleThemeChange: ((e: MediaQueryListEvent) => void) | null = null
   let themeObserver: MutationObserver | null = null
+  let previousTabId: string | null = null
 
-  function createEditor() {
+  function createEditor(doc?: string) {
     if (!containerRef.value) return
 
     const updateListener = EditorView.updateListener.of((update) => {
@@ -259,7 +265,7 @@ export function useEditor(
     }])
 
     const state = EditorState.create({
-      doc: initialContent,
+      doc: doc ?? initialContent,
       extensions: [
         lineNumbers(),
         highlightActiveLine(),
@@ -363,6 +369,7 @@ export function useEditor(
 
   onMounted(() => {
     createEditor()
+    setLlmEnabled(isLlmEnabled())
 
     // Watch for class changes on <html> (manual theme toggle)
     themeObserver = new MutationObserver(() => {
@@ -389,12 +396,35 @@ export function useEditor(
   })
 
   onUnmounted(() => {
+    if (previousTabId && editorView.value) {
+      tabStateStorage.set(previousTabId, editorView.value.state)
+    }
     themeObserver?.disconnect()
     if (mediaQuery && handleThemeChange) {
       mediaQuery.removeEventListener('change', handleThemeChange)
     }
     editorView.value?.destroy()
   })
+
+  if (tabId) {
+    watch(tabId, (newTabId, oldTabId) => {
+      if (!editorView.value) return
+
+      if (oldTabId) {
+        tabStateStorage.set(oldTabId, editorView.value.state)
+      }
+
+      previousTabId = newTabId
+
+      if (!newTabId) return
+
+      const savedState = tabStateStorage.get(newTabId)
+      if (savedState) {
+        editorView.value.setState(savedState)
+        content.value = savedState.doc.toString()
+      }
+    })
+  }
 
   return {
     editorView,

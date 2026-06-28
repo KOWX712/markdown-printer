@@ -29,6 +29,7 @@ import Gallery from './Gallery.vue'
 const props = defineProps<{
   modelValue: string
   softWrap: boolean
+  tabId: string | null
 }>()
 
 const emit = defineEmits<{
@@ -38,12 +39,14 @@ const emit = defineEmits<{
 }>()
 
 const editorContainer = ref<HTMLElement | null>(null)
+const tabIdRef = ref(props.tabId)
 
 const { editorView, content, selectedText, undo, redo, insertText, scrollToLine, focus, setSoftWrap } = useEditor(
   editorContainer,
   props.modelValue,
   (value) => emit('update:modelValue', value),
-  props.softWrap
+  props.softWrap,
+  tabIdRef,
 )
 
 const { uploadImage } = useImages()
@@ -54,6 +57,10 @@ watch(selectedText, (val) => {
 
 watch(() => props.softWrap, (val) => {
   setSoftWrap(val)
+})
+
+watch(() => props.tabId, (val) => {
+  tabIdRef.value = val
 })
 
 watch(() => props.modelValue, (newVal) => {

@@ -53,7 +53,7 @@
             ref="editorRef"
             v-model="editorContent"
             :soft-wrap="settings.softWrap"
-            :llm-enabled="llmEnabled"
+            :tab-id="activeTabId"
             class="editor-section"
             :class="{ 'full-width': settings.viewMode !== 'split' }"
             @editor-ready="onEditorReady"
