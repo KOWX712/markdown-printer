@@ -12,15 +12,49 @@ export function useMarkdown(content: Ref<string>) {
   const renderedHtml = ref('')
   const error = ref<string | null>(null)
 
-  let currentSource = ''
+  let originalSource = ''
   let sourceSearchPos = 0
 
+  /**
+   * Normalize whitespace for searching: collapse 2+ consecutive newlines to single,
+   * trim leading/trailing whitespace. Handles the mismatch between preprocessed source
+   * (which adds blank lines around $$ blocks and expands inline $...$) and original source.
+   */
+  function normalizeForSearch(text: string): string {
+    return text.replace(/\n{2,}/g, '\n').trim()
+  }
+
   function lineAtRaw(raw: string): number {
-    const idx = currentSource.indexOf(raw, sourceSearchPos)
-    const useIdx = idx >= 0 ? idx : currentSource.indexOf(raw)
-    if (useIdx < 0) return 1
-    sourceSearchPos = useIdx + raw.length
-    return currentSource.slice(0, useIdx).split('\n').length
+    let idx = originalSource.indexOf(raw, sourceSearchPos)
+    let useIdx = idx >= 0 ? idx : originalSource.indexOf(raw)
+
+    if (useIdx >= 0) {
+      sourceSearchPos = useIdx + raw.length
+      return originalSource.slice(0, useIdx).split('\n').length
+    }
+
+    const normalized = normalizeForSearch(raw)
+    if (normalized !== raw) {
+      idx = originalSource.indexOf(normalized, sourceSearchPos)
+      useIdx = idx >= 0 ? idx : originalSource.indexOf(normalized)
+      if (useIdx >= 0) {
+        sourceSearchPos = useIdx + normalized.length
+        return originalSource.slice(0, useIdx).split('\n').length
+      }
+    }
+
+    // Fallback: try searching with blockquote prefixes (> ) for alert content
+    // that has been transformed by markedAlert (raw text stripped of > prefix)
+    const lines = raw.split('\n')
+    for (let depth = 1; depth <= 4; depth++) {
+      const prefixed = lines.map(l => `${'> '.repeat(depth)}${l}`).join('\n')
+      const prefixIdx = originalSource.indexOf(prefixed)
+      if (prefixIdx >= 0) {
+        sourceSearchPos = prefixIdx + prefixed.length
+        return originalSource.slice(0, prefixIdx).split('\n').length
+      }
+    }
+    return 1
   }
 
   // Wrap marked-extended-tables renderer to emit data-source-line
@@ -147,10 +181,33 @@ export function useMarkdown(content: Ref<string>) {
 
   async function render() {
     try {
+      originalSource = content.value
       const preprocessed = preprocessMarkdown(content.value)
-      currentSource = preprocessed
       sourceSearchPos = 0
-      const html = await marked.parse(preprocessed)
+      let html = await marked.parse(preprocessed)
+
+      const sourceLines = originalSource.split('\n')
+      const katexStartLines: number[] = []
+      let inKatex = false
+      for (let i = 0; i < sourceLines.length; i++) {
+        if (sourceLines[i].trim() === '$$') {
+          if (!inKatex) {
+            katexStartLines.push(i + 1)
+            inKatex = true
+          } else {
+            inKatex = false
+          }
+        }
+      }
+
+      let katexIdx = 0
+      html = html.replace(/<span class="katex-display">/g, () => {
+        if (katexIdx < katexStartLines.length) {
+          return `<span class="katex-display" data-source-line="${katexStartLines[katexIdx++]}">`
+        }
+        return '<span class="katex-display">'
+      })
+
       renderedHtml.value = html
       error.value = null
     } catch (e) {
