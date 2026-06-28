@@ -172,13 +172,6 @@ export function usePDF() {
           overflow-wrap: break-word;
           word-wrap: break-word;
         }
-        }
-
-        .markdown-body table td,
-        .markdown-body table th {
-          overflow-wrap: break-word;
-          word-wrap: break-word;
-        }
 
         .markdown-body pre,
         .markdown-body pre code {

@@ -171,7 +171,7 @@ export function usePagination(
         if (currentPageElements.length > 0) {
           result.push({ index: result.length, elements: currentPageElements })
         }
-        currentPageElements = []
+        currentPageElements = [child.outerHTML]
         currentHeight = 0
         prevMarginBottom = 0
         continue
