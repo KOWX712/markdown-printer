@@ -22,11 +22,11 @@ import 'primeicons/primeicons.css'
 import { createApp } from 'vue'
 import { definePreset } from '@primeuix/themes';
 import PrimeVue from 'primevue/config'
-import Lara from '@primeuix/themes/lara'
+import Aura from '@primeuix/themes/aura'
 import App from './App.vue'
 import './styles/main.css'
 
-const skyTheme = definePreset(Lara, {
+const skyTheme = definePreset(Aura, {
   semantic: {
     primary: {
       50: '{sky.50}',

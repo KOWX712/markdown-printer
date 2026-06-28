@@ -1,145 +1,66 @@
 <template>
-  <Teleport to="body">
-    <div
-      v-if="visible && mode === 'normal'"
-      ref="menuRef"
-      class="context-menu"
-      :style="{ left: `${adjustedX}px`, top: `${adjustedY}px` }"
-      @click.stop
-    >
-      <div class="icon-row">
-        <Button severity="contrast" size="small" variant="outlined" @click="handleCopy" title="Copy">
-          <template #icon>
-            <Copy :size="16" />
-          </template>
-        </Button>
-        <Button severity="contrast" size="small" variant="outlined" @click="handlePaste" title="Paste">
-          <template #icon>
-            <ClipboardPaste :size="16" />
-          </template>
-        </Button>
-      </div>
-      <div class="icon-row">
-        <Button :severity="activeFormats?.bold ? 'info' : 'contrast'" size="small" variant="outlined" @click="handleAction('bold')" title="Bold">
-          <template #icon>
-            <Bold :size="16" />
-          </template>
-        </Button>
-        <Button :severity="activeFormats?.italic ? 'info' : 'contrast'" size="small" variant="outlined" @click="handleAction('italic')" title="Italic">
-          <template #icon>
-            <Italic :size="16" />
-          </template>
-        </Button>
-        <Button :severity="activeFormats?.underline ? 'info' : 'contrast'" size="small" variant="outlined" @click="handleAction('underline')" title="Underline">
-          <template #icon>
-            <Underline :size="16" />
-          </template>
-        </Button>
-        <Button :severity="activeFormats?.strikethrough ? 'info' : 'contrast'" size="small" variant="outlined" @click="handleAction('strikethrough')" title="Strikethrough">
-          <template #icon>
-            <Strikethrough :size="16" />
-          </template>
-        </Button>
-      </div>
-      <div class="icon-row">
-        <Button
-          v-for="level in 6"
-          :key="level"
-          :severity="activeFormats?.heading === level ? 'info' : 'contrast'"
-          size="small" variant="outlined"
-          @click="handleAction(`heading${level}`)"
-          :title="`Heading ${level}`"
-        >
-          <template #icon>
-            <component :is="headingComponents[level - 1]" :size="16" />
-          </template>
-        </Button>
-      </div>
-      <div class="icon-row">
-        <Button :severity="activeFormats?.listType === 'ul' ? 'info' : 'contrast'" size="small" variant="outlined" @click="handleAction('unorderedList')" title="Unordered List">
-          <template #icon>
-            <List :size="16" />
-          </template>
-        </Button>
-        <Button :severity="activeFormats?.listType === 'ol' ? 'info' : 'contrast'" size="small" variant="outlined" @click="handleAction('orderedList')" title="Ordered List">
-          <template #icon>
-            <ListOrdered :size="16" />
-          </template>
-        </Button>
-      </div>
-      <div class="icon-row">
-        <Button :severity="activeFormats?.alignment === 'left' ? 'info' : 'contrast'" size="small" variant="outlined" @click="handleAction('alignLeft')" title="Align Left">
-          <template #icon>
-            <TextAlignStart :size="16" />
-          </template>
-        </Button>
-        <Button :severity="activeFormats?.alignment === 'center' ? 'info' : 'contrast'" size="small" variant="outlined" @click="handleAction('alignCenter')" title="Align Center">
-          <template #icon>
-            <TextAlignCenter :size="16" />
-          </template>
-        </Button>
-        <Button :severity="activeFormats?.alignment === 'right' ? 'info' : 'contrast'" size="small" variant="outlined" @click="handleAction('alignRight')" title="Align Right">
-          <template #icon>
-            <TextAlignEnd :size="16" />
-          </template>
-        </Button>
-      </div>
-      <Divider />
-      <div class="text-row">
-        <Button severity="contrast" text size="small" @click="handleAction('link')">Link</Button>
-        <Button severity="contrast" text size="small" @click="handleAction('image')">Image</Button>
-        <Button severity="contrast" text size="small" @click="handleAction('code')">Code</Button>
-        <Button severity="contrast" text size="small" @click="handleAction('blockquote')">Blockquote</Button>
-        <Button severity="contrast" text size="small" @click="handleAction('horizontalRule')">Horizontal Rule</Button>
-        <Button severity="contrast" text size="small" @click="switchToTableMode">Table</Button>
-      </div>
-    </div>
-
-    <!-- Table picker mode -->
-    <div
-      v-if="visible && mode === 'table'"
-      ref="tableMenuRef"
-      class="context-menu table-picker"
-      :style="{ left: `${adjustedX}px`, top: `${adjustedY}px` }"
-      @click.stop
-    >
-      <div
-        class="table-grid"
-        @mouseleave="hoverRows = 0; hoverCols = 0"
-      >
+  <div class="editor-context-menu">
+    <PrimeContextMenu ref="menuRef" :model="items" @hide="onHide" >
+      <template #item="{ item, props }">
+        <!-- Inline button row -->
         <div
-          v-for="row in 7"
-          :key="row"
-          class="table-grid-row"
+          v-if="item._type === 'row'"
+          class="inline-row"
+          @click.stop
         >
-          <div
-            v-for="col in 7"
-            :key="col"
-            class="table-cell"
-            :class="{ selected: row <= hoverRows && col <= hoverCols }"
-            @mouseenter="onTableCellHover(row, col)"
-            @click="insertTable(row, col)"
-          ></div>
+          <Button
+            v-for="btn in item._buttons!"
+            :key="btn.action"
+            :class="{ active: btn.active }"
+            @click.stop="btn.handler()"
+            :title="btn.label"
+            :severity="btn.active ? 'info' : 'contrast'"
+            :variant="btn.active ? '' : 'text'"
+            size="small"
+          >
+            <component :is="btn.icon" :size="16" />
+          </Button>
         </div>
-      </div>
-      <div class="table-size-label">
-        <template v-if="hoverRows > 0 && hoverCols > 0">
-          {{ hoverRows }} × {{ hoverCols }}
-        </template>
-        <template v-else>&nbsp;</template>
-      </div>
-    </div>
-  </Teleport>
+        <!-- Table grid picker -->
+        <div v-else-if="item._type === 'grid'" class="table-grid-wrapper" @click.stop>
+          <div class="table-grid" @mouseleave="hoverRows = 0; hoverCols = 0">
+            <div v-for="row in 7" :key="row" class="table-grid-row">
+              <div
+                v-for="col in 7" :key="col"
+                class="table-cell"
+                :class="{ selected: row <= hoverRows && col <= hoverCols }"
+                @mouseenter="hoverRows = row; hoverCols = col"
+                @click.stop="insertTable(row, col)"
+              />
+            </div>
+          </div>
+          <div class="table-size-label">
+            <template v-if="hoverRows > 0 && hoverCols > 0">{{ hoverRows }} × {{ hoverCols }}</template>
+            <template v-else>&nbsp;</template>
+          </div>
+        </div>
+        <!-- Regular PrimeVue item (with submenu arrow if it has items) -->
+        <a v-else v-bind="props.action" class="context-menu-item" :class="{ 'item-active': item.isActive }">
+          <component :is="item.iconComponent" v-if="item.iconComponent" :size="16" class="menu-item-icon" />
+          <span class="menu-item-label">{{ item.label }}</span>
+          <ChevronRight v-if="item.items" :size="14" class="submenu-end-icon" />
+        </a>
+      </template>
+    </PrimeContextMenu>
+  </div>
 </template>
 
 <script setup lang="ts">
-import { ref, watch, nextTick, onMounted, onUnmounted, markRaw } from 'vue'
-import Button from 'primevue/button'
+import { ref, computed, markRaw } from 'vue'
+import type { Component } from 'vue'
+import PrimeContextMenu from 'primevue/contextmenu'
+import type { MenuItem } from 'primevue/menuitem'
 import {
   Bold,
   Italic,
   Underline,
   Strikethrough,
+  Code,
   Heading1,
   Heading2,
   Heading3,
@@ -153,23 +74,38 @@ import {
   TextAlignEnd,
   Copy,
   ClipboardPaste,
+  Table,
+  ChevronRight,
 } from '@lucide/vue'
-import Divider from 'primevue/divider'
+import Button from 'primevue/button'
 
 interface ActiveFormats {
   bold: boolean
   italic: boolean
   underline: boolean
   strikethrough: boolean
+  code: boolean
   heading: 0 | 1 | 2 | 3 | 4 | 5 | 6
   alignment: 'left' | 'center' | 'right' | null
   listType: 'ul' | 'ol' | null
 }
 
+interface ContextMenuItem extends MenuItem {
+  iconComponent?: Component
+  isActive?: boolean
+  _type?: 'row' | 'grid'
+  _buttons?: InlineButton[]
+}
+
+interface InlineButton {
+  icon: Component
+  action: string
+  label: string
+  active: boolean
+  handler: () => void
+}
+
 const props = defineProps<{
-  visible: boolean
-  x: number
-  y: number
   selectedText?: string
   activeFormats?: ActiveFormats
 }>()
@@ -179,76 +115,30 @@ const emit = defineEmits<{
   close: []
 }>()
 
-const headingComponents = [
-  markRaw(Heading1),
-  markRaw(Heading2),
-  markRaw(Heading3),
-  markRaw(Heading4),
-  markRaw(Heading5),
-  markRaw(Heading6),
-]
-
-const menuRef = ref<HTMLElement | null>(null)
-const tableMenuRef = ref<HTMLElement | null>(null)
-const adjustedX = ref(0)
-const adjustedY = ref(0)
-
-const mode = ref<'normal' | 'table'>('normal')
+const menuRef = ref<InstanceType<typeof PrimeContextMenu>>()
 const hoverRows = ref(0)
 const hoverCols = ref(0)
 
-watch(
-  () => [props.visible, props.x, props.y],
-  async ([isVisible]) => {
-    if (isVisible) {
-      mode.value = 'normal'
-      adjustPosition()
-    }
-  },
-  { immediate: true }
-)
-
-async function adjustPosition() {
-  adjustedX.value = props.x + 4
-  adjustedY.value = props.y + 4
-
-  await nextTick()
-
-  const refToUse = mode.value === 'table' ? tableMenuRef : menuRef
-  if (refToUse.value) {
-    const rect = refToUse.value.getBoundingClientRect()
-    const padding = 8
-
-    if (adjustedX.value + rect.width > window.innerWidth - padding) {
-      adjustedX.value = window.innerWidth - rect.width - padding
-    }
-
-    if (adjustedY.value + rect.height > window.innerHeight - padding) {
-      adjustedY.value = window.innerHeight - rect.height - padding
-    }
-  }
+function show(event: MouseEvent) {
+  menuRef.value?.show(event)
 }
 
-function switchToTableMode() {
-  mode.value = 'table'
-  hoverRows.value = 0
-  hoverCols.value = 0
-  adjustPosition()
+function hide() {
+  menuRef.value?.hide()
 }
 
-function onTableCellHover(row: number, col: number) {
-  hoverRows.value = row
-  hoverCols.value = col
+function onHide() {
+  emit('close')
+}
+
+function handleAction(type: string, value?: string) {
+  emit('action', type, value || props.selectedText)
+  emit('close')
 }
 
 function insertTable(rows: number, cols: number) {
   emit('action', 'table', `${rows}x${cols}`)
-  emit('close')
-}
-
-function handleAction(type: string) {
-  emit('action', type, props.selectedText)
-  emit('close')
+  menuRef.value?.hide()
 }
 
 function handleCopy() {
@@ -290,85 +180,181 @@ function handlePaste() {
   }
 }
 
-function handleClickOutside(e: MouseEvent) {
-  if (props.visible) {
-    emit('close')
-  }
+const BoldIcon = markRaw(Bold)
+const ItalicIcon = markRaw(Italic)
+const UnderlineIcon = markRaw(Underline)
+const StrikethroughIcon = markRaw(Strikethrough)
+const CodeIcon = markRaw(Code)
+const ListIcon = markRaw(List)
+const ListOrderedIcon = markRaw(ListOrdered)
+const AlignLeftIcon = markRaw(TextAlignStart)
+const AlignCenterIcon = markRaw(TextAlignCenter)
+const AlignRightIcon = markRaw(TextAlignEnd)
+const CopyIcon = markRaw(Copy)
+const ClipboardPasteIcon = markRaw(ClipboardPaste)
+const TableIcon = markRaw(Table)
+const HeadingIcons = [
+  markRaw(Heading1), markRaw(Heading2), markRaw(Heading3),
+  markRaw(Heading4), markRaw(Heading5), markRaw(Heading6),
+]
+
+function makeRowButton(action: string, label: string, icon: Component, active: boolean): InlineButton {
+  return { icon, action, label, active, handler: () => handleAction(action) }
 }
 
-function handleEscape(e: KeyboardEvent) {
-  if (e.key === 'Escape' && props.visible) {
-    emit('close')
-  }
-}
+const items = computed<ContextMenuItem[]>(() => {
+  const af = props.activeFormats
 
-onMounted(() => {
-  document.addEventListener('click', handleClickOutside)
-  document.addEventListener('keydown', handleEscape)
+  return [
+    // Clipboard row
+    {
+      _type: 'row',
+      command: () => {},
+      _buttons: [
+        { icon: CopyIcon, action: 'copy', label: 'Copy', active: false, handler: handleCopy },
+        { icon: ClipboardPasteIcon, action: 'paste', label: 'Paste', active: false, handler: handlePaste },
+      ],
+    } as ContextMenuItem,
+    { separator: true },
+
+    // Inline formatting row
+    {
+      _type: 'row',
+      command: () => {},
+      _buttons: [
+        makeRowButton('bold', 'Bold', BoldIcon, af?.bold ?? false),
+        makeRowButton('italic', 'Italic', ItalicIcon, af?.italic ?? false),
+        makeRowButton('underline', 'Underline', UnderlineIcon, af?.underline ?? false),
+        makeRowButton('strikethrough', 'Strikethrough', StrikethroughIcon, af?.strikethrough ?? false),
+        makeRowButton('code', 'Code', CodeIcon, af?.code ?? false),
+      ],
+    } as ContextMenuItem,
+
+    // Headings row
+    {
+      _type: 'row',
+      command: () => {},
+      _buttons: HeadingIcons.map((comp, i) =>
+        makeRowButton(`heading${i + 1}`, `Heading ${i + 1}`, comp, af?.heading === (i + 1) as 1 | 2 | 3 | 4 | 5 | 6)
+      ),
+    } as ContextMenuItem,
+
+    // Lists row
+    {
+      _type: 'row',
+      command: () => {},
+      _buttons: [
+        makeRowButton('unorderedList', 'Unordered List', ListIcon, af?.listType === 'ul'),
+        makeRowButton('orderedList', 'Ordered List', ListOrderedIcon, af?.listType === 'ol'),
+      ],
+    } as ContextMenuItem,
+
+    // Alignment row
+    {
+      _type: 'row',
+      command: () => {},
+      _buttons: [
+        makeRowButton('alignLeft', 'Align Left', AlignLeftIcon, af?.alignment === 'left'),
+        makeRowButton('alignCenter', 'Align Center', AlignCenterIcon, af?.alignment === 'center'),
+        makeRowButton('alignRight', 'Align Right', AlignRightIcon, af?.alignment === 'right'),
+      ],
+    } as ContextMenuItem,
+    { separator: true },
+
+    // Insert items
+    { label: 'Link', command: () => handleAction('link') },
+    { label: 'Image', command: () => handleAction('image') },
+    { label: 'Code Block', command: () => handleAction('codeBlock') },
+    {
+      label: 'Blockquote',
+      items: [
+        { label: 'Basic', command: () => handleAction('blockquote') },
+        { label: 'Note', command: () => handleAction('alertNote') },
+        { label: 'Tip', command: () => handleAction('alertTip') },
+        { label: 'Important', command: () => handleAction('alertImportant') },
+        { label: 'Warning', command: () => handleAction('alertWarning') },
+        { label: 'Caution', command: () => handleAction('alertCaution') },
+      ],
+    } as ContextMenuItem,
+    { label: 'Horizontal Rule', command: () => handleAction('horizontalRule') },
+    { separator: true },
+
+    // Table submenu (grid picker)
+    {
+      label: 'Table',
+      iconComponent: TableIcon,
+      items: [
+        { _type: 'grid', command: () => {} } as ContextMenuItem,
+      ],
+    } as ContextMenuItem,
+  ]
 })
 
-onUnmounted(() => {
-  document.removeEventListener('click', handleClickOutside)
-  document.removeEventListener('keydown', handleEscape)
-})
+defineExpose({ show, hide })
 </script>
 
 <style scoped>
-.context-menu {
-  position: fixed;
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
-  border-radius: 6px;
-  padding: 4px 0;
-  z-index: 1000;
-  min-width: 160px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-}
-
-.icon-row {
+.context-menu-item {
   display: flex;
-  gap: 2px;
-  padding: 2px 4px;
+  align-items: center;
+  gap: 8px;
+  padding: 0.5rem 0.75rem;
+  cursor: pointer;
+  text-decoration: none;
+  color: inherit;
+  white-space: nowrap;
 }
 
-.text-row {
+.menu-item-icon {
+  flex-shrink: 0;
+}
+
+.menu-item-label {
+  flex: 1;
+}
+
+.inline-row {
   display: flex;
-  flex-direction: column;
-  padding: 2px 4px;
+  gap: 4px;
+  margin: 2px 0;
 }
 
-.text-row :deep(.p-button) {
-  justify-content: flex-start;
+.submenu-end-icon {
+  margin-left: auto;
+  flex-shrink: 0;
+  opacity: 0.5;
 }
 
-.table-picker {
+/* Table grid picker */
+.table-grid-wrapper {
   padding: 8px;
-  min-width: unset;
 }
 
 .table-grid {
-  display: inline-flex;
+  display: flex;
   flex-direction: column;
   gap: 2px;
+  width: 100%;
 }
 
 .table-grid-row {
   display: flex;
+  width: 100%;
   gap: 2px;
 }
 
 .table-cell {
-  width: 20px;
-  height: 20px;
-  border: 1px solid var(--border-color);
+  flex: 1;
+  aspect-ratio: 1 / 1;
+  height: auto;
+  border: 2px solid var(--border-color);
   border-radius: 2px;
   cursor: pointer;
   background: transparent;
-  transition: background 0.08s ease;
+  transition: border 0.08s ease;
 }
 
 .table-cell.selected {
-  background: var(--accent-color);
   border-color: var(--accent-color);
 }
 
@@ -376,8 +362,24 @@ onUnmounted(() => {
   text-align: center;
   margin-top: 6px;
   font-size: 12px;
-  color: var(--text-primary);
-  opacity: 0.7;
+  color: color-mix(in srgb, var(--text-primary) 60%, transparent);
   min-height: 16px;
+}
+</style>
+
+<style>
+.p-contextmenu {
+  --p-contextmenu-background: var(--bg-secondary);
+}
+.p-contextmenu-item {
+  --p-contextmenu-item-focus-background: var(--bg-primary);
+  --p-contextmenu-item-hover-background: var(--bg-primary);
+  --p-contextmenu-item-active-background: var(--bg-primary);
+}
+.p-contextmenu-item:has(.inline-row),
+.p-contextmenu-item:has(.table-grid-wrapper) {
+  --p-contextmenu-item-focus-background: transparent;
+  --p-contextmenu-item-hover-background: transparent;
+  --p-contextmenu-item-active-background: transparent;
 }
 </style>

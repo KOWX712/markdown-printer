@@ -2,9 +2,7 @@
   <div class="editor-pane" @contextmenu.prevent="handleContextMenu">
     <div ref="editorContainer" class="editor-container"></div>
     <ContextMenu
-      :visible="contextMenuVisible"
-      :x="contextMenuX"
-      :y="contextMenuY"
+      ref="contextMenuRef"
       :selected-text="contextMenuText"
       :active-formats="activeFormats"
       @action="handleContextAction"
@@ -60,21 +58,22 @@ interface ActiveFormats {
   italic: boolean
   underline: boolean
   strikethrough: boolean
+  code: boolean
   heading: 0 | 1 | 2 | 3 | 4 | 5 | 6
   alignment: 'left' | 'center' | 'right' | null
   listType: 'ul' | 'ol' | null
 }
 
 // Context menu state
-const contextMenuVisible = ref(false)
-const contextMenuX = ref(0)
-const contextMenuY = ref(0)
+const contextMenuRef = ref<InstanceType<typeof ContextMenu> | null>(null)
+const contextMenuOpen = ref(false)
 const contextMenuText = ref('')
 const activeFormats = ref<ActiveFormats>({
   bold: false,
   italic: false,
   underline: false,
   strikethrough: false,
+  code: false,
   heading: 0,
   alignment: null,
   listType: null,
@@ -83,21 +82,6 @@ const headingLevel = ref(0)
 const lineFrom = ref(0)
 const lineTo = ref(0)
 const wasLineFallback = ref(false)
-
-// Selection change detection for mobile selection handles
-let selectionChangeTimer: ReturnType<typeof setTimeout> | null = null
-let contextMenuShowTimer: ReturnType<typeof setTimeout> | null = null
-
-function handleSelectionChange() {
-  if (!contextMenuVisible.value) return
-
-  contextMenuVisible.value = false
-
-  if (selectionChangeTimer) clearTimeout(selectionChangeTimer)
-  selectionChangeTimer = setTimeout(() => {
-    selectionChangeTimer = null
-  }, 1000)
-}
 
 function detectActiveFormats(
   text: string,
@@ -110,6 +94,7 @@ function detectActiveFormats(
   const italic = !bold && text.length > 2 && text.startsWith('*') && text.endsWith('*')
   const underline = text.length > 7 && text.startsWith('<u>') && text.endsWith('</u>')
   const strikethrough = text.length > 4 && text.startsWith('~~') && text.endsWith('~~')
+  const code = text.length > 2 && text.startsWith('`') && text.endsWith('`')
 
   // Heading detection from first line
   const headingMatch = effectiveText.match(/^(#{1,6})\s*/)
@@ -158,21 +143,11 @@ function detectActiveFormats(
     listType = ulCount >= olCount ? 'ul' : 'ol'
   }
 
-  return { bold, italic, underline, strikethrough, heading, alignment, listType }
+  return { bold, italic, underline, strikethrough, code, heading, alignment, listType }
 }
 
 function handleContextMenu(e: MouseEvent) {
   if (!editorView.value) return
-
-  if (selectionChangeTimer) {
-    if (contextMenuShowTimer) clearTimeout(contextMenuShowTimer)
-    contextMenuShowTimer = setTimeout(() => {
-      showContextMenu(e)
-      contextMenuShowTimer = null
-    }, 1000)
-    return
-  }
-
   showContextMenu(e)
 }
 
@@ -219,13 +194,12 @@ function showContextMenu(e: MouseEvent) {
   const workTo = selection.empty ? cursorLine.to : selection.to
   activeFormats.value = detectActiveFormats(strippedText, effectiveText, editorView.value, workFrom, workTo)
 
-  contextMenuX.value = e.clientX
-  contextMenuY.value = e.clientY
-  contextMenuVisible.value = true
+  contextMenuRef.value?.show(e)
+  contextMenuOpen.value = true
 }
 
 function closeContextMenu() {
-  contextMenuVisible.value = false
+  contextMenuOpen.value = false
 }
 
 function handleContextAction(type: string, _text?: string) {
@@ -358,15 +332,67 @@ function handleContextAction(type: string, _text?: string) {
       break
     }
     case 'code': {
-      insert = `\`${textWithoutHeading || 'code'}\``
-      selectionFrom = workFrom + 1
-      selectionTo = workFrom + 1 + (textWithoutHeading || 'code').length
+      if (formatText.length > 1 && formatText.startsWith('`') && formatText.endsWith('`')) {
+        // Already inline code: unwrap
+        insert = formatText.slice(1, -1)
+      } else {
+        const text = formatText || 'code'
+        insert = `\`${text}\``
+      }
+      if (currentLevel > 0) {
+        insert = `${'#'.repeat(currentLevel)} ${insert}`
+      }
+      selectionFrom = workFrom + (formatText ? 0 : 1)
+      selectionTo = workFrom + insert.length - (formatText ? 0 : 1)
+      break
+    }
+    case 'codeBlock': {
+      const lang = 'python'
+      const codeContent = textWithoutHeading || 'print("Hello, World!")'
+      insert = '```' + lang + '\n' + codeContent + '\n```'
+      selectionFrom = workFrom + 4 + lang.length
+      selectionTo = selectionFrom + codeContent.length
       break
     }
     case 'blockquote': {
       insert = `> ${textWithoutHeading || 'quote'}`
       selectionFrom = workFrom + 2
       selectionTo = workFrom + 2 + (textWithoutHeading || 'quote').length
+      break
+    }
+    case 'alertNote': {
+      const text0 = textWithoutHeading || 'Useful information that users should know, even when skimming content.'
+      insert = `> [!NOTE]\n> ${text0}`
+      selectionFrom = workFrom + insert.indexOf(text0)
+      selectionTo = selectionFrom + text0.length
+      break
+    }
+    case 'alertTip': {
+      const text0 = textWithoutHeading || 'Helpful advice for doing things better or more easily.'
+      insert = `> [!TIP]\n> ${text0}`
+      selectionFrom = workFrom + insert.indexOf(text0)
+      selectionTo = selectionFrom + text0.length
+      break
+    }
+    case 'alertImportant': {
+      const text0 = textWithoutHeading || 'Key information users need to know to achieve their goal.'
+      insert = `> [!IMPORTANT]\n> ${text0}`
+      selectionFrom = workFrom + insert.indexOf(text0)
+      selectionTo = selectionFrom + text0.length
+      break
+    }
+    case 'alertWarning': {
+      const text0 = textWithoutHeading || 'Urgent info that needs immediate user attention to avoid problems.'
+      insert = `> [!WARNING]\n> ${text0}`
+      selectionFrom = workFrom + insert.indexOf(text0)
+      selectionTo = selectionFrom + text0.length
+      break
+    }
+    case 'alertCaution': {
+      const text0 = textWithoutHeading || 'Advises about risks or negative outcomes of certain actions.'
+      insert = `> [!CAUTION]\n> ${text0}`
+      selectionFrom = workFrom + insert.indexOf(text0)
+      selectionTo = selectionFrom + text0.length
       break
     }
     case 'unorderedList': {
@@ -493,7 +519,6 @@ function handleContextAction(type: string, _text?: string) {
 
       // Check current alignment
       const alignRegex = /^<div align="(left|center|right)">/
-      const closingTag = '</div>'
       const hasAlignment = alignRegex.test(textWithoutHeading)
 
       if (hasAlignment) {
@@ -529,6 +554,27 @@ function handleContextAction(type: string, _text?: string) {
   })
 
   editorView.value.focus()
+
+  // Refresh active formats so context menu buttons update immediately
+  refreshActiveFormats(editorView.value, type)
+}
+
+function refreshActiveFormats(_view: any, actionType: string) {
+  const cur = activeFormats.value
+
+  if (['bold', 'italic', 'underline', 'strikethrough', 'code'].includes(actionType)) {
+    activeFormats.value = { ...cur, [actionType]: !cur[actionType as keyof ActiveFormats] }
+  } else if (actionType.startsWith('heading')) {
+    const level = parseInt(actionType.replace('heading', ''), 10) as 1 | 2 | 3 | 4 | 5 | 6
+    activeFormats.value = { ...cur, heading: cur.heading === level ? 0 : level }
+  } else if (['alignLeft', 'alignCenter', 'alignRight'].includes(actionType)) {
+    const target = actionType === 'alignLeft' ? 'left' : actionType === 'alignCenter' ? 'center' : 'right' as 'left' | 'center' | 'right'
+    activeFormats.value = { ...cur, alignment: cur.alignment === target ? null : target }
+  } else if (actionType === 'unorderedList') {
+    activeFormats.value = { ...cur, listType: cur.listType === 'ul' ? null : 'ul' }
+  } else if (actionType === 'orderedList') {
+    activeFormats.value = { ...cur, listType: cur.listType === 'ol' ? null : 'ol' }
+  }
 }
 
 // Expose methods to parent
@@ -548,17 +594,6 @@ setTimeout(() => {
     emit('editor-ready', editorView.value)
   }
 }, 100)
-
-// Selection change listener for mobile drag detection
-onMounted(() => {
-  document.addEventListener('selectionchange', handleSelectionChange)
-})
-
-onUnmounted(() => {
-  if (selectionChangeTimer) clearTimeout(selectionChangeTimer)
-  if (contextMenuShowTimer) clearTimeout(contextMenuShowTimer)
-  document.removeEventListener('selectionchange', handleSelectionChange)
-})
 </script>
 
 <style scoped>
