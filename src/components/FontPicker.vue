@@ -21,13 +21,6 @@
       </template>
       <template #option="{ option, selected }">
         <div
-          v-if="option.family === '__upload__'"
-          class="font-option-upload"
-        >
-          ＋ Upload font…
-        </div>
-        <div
-          v-else
           :class="['font-option-item', { 'font-option-selected': selected }]"
           :style="{ fontFamily: option.family }"
           @mousedown="handleOptionMouseDown($event, option)"
@@ -38,6 +31,11 @@
       </template>
       <template #optiongroup="{ option }">
         <div class="font-group-header">{{ option.label }}</div>
+      </template>
+      <template #footer>
+        <div class="font-upload-footer" @click="startUpload">
+          ＋ Upload font…
+        </div>
       </template>
     </Select>
 
@@ -90,8 +88,9 @@ const groupedFonts = computed(() => {
 
 const selectGroups = computed(() => {
   const groups: { label: string; items: FontOption[] }[] = []
-  const uploadOption: FontOption = { name: '＋ Upload font…', family: '__upload__', source: 'uploaded', group: 'Custom' }
-  groups.push({ label: 'Custom', items: [uploadOption, ...uploadedFonts.value] })
+  if (uploadedFonts.value.length > 0) {
+    groups.push({ label: 'Custom', items: [...uploadedFonts.value] })
+  }
   for (const [label, groupFonts] of Object.entries(groupedFonts.value)) {
     groups.push({ label, items: groupFonts })
   }
@@ -109,12 +108,12 @@ function getFontName(family: string): string {
 }
 
 function handleFontSelect(value: string) {
-  if (value === '__upload__') {
-    selectRef.value?.hide()
-    fileInput.value?.click()
-    return
-  }
   emit('update:modelValue', value)
+}
+
+function startUpload() {
+  selectRef.value?.hide()
+  fileInput.value?.click()
 }
 
 function openContextMenu(event: MouseEvent, font: FontOption) {
@@ -123,13 +122,13 @@ function openContextMenu(event: MouseEvent, font: FontOption) {
 }
 
 function handleOptionMouseDown(event: MouseEvent, option: FontOption) {
-  if (event.button === 2 && option.source === 'uploaded' && option.family !== '__upload__') {
+  if (event.button === 2 && option.source === 'uploaded') {
     event.stopImmediatePropagation()
   }
 }
 
 function handleOptionContextMenu(event: MouseEvent, option: FontOption) {
-  if (option.source === 'uploaded' && option.family !== '__upload__') {
+  if (option.source === 'uploaded') {
     openContextMenu(event, option)
   }
 }
@@ -166,6 +165,13 @@ async function handleUpload(e: Event) {
 
   const fontName = customName.trim()
   const fontFamily = `Custom-${fontName}`
+
+  if (fonts.value.some(f => f.source === 'uploaded' && f.name.toLowerCase() === fontName.toLowerCase())) {
+    alert(`A custom font named "${fontName}" already exists.`)
+    input.value = ''
+    return
+  }
+
   const buffer = await file.arrayBuffer()
 
   try {
@@ -206,6 +212,11 @@ async function renameFont() {
   const trimmed = newName.trim()
   const newFamily = `Custom-${trimmed}`
   const oldFamily = font.family
+
+  if (fonts.value.some(f => f.source === 'uploaded' && f.family !== oldFamily && f.name.toLowerCase() === trimmed.toLowerCase())) {
+    alert(`A custom font named "${trimmed}" already exists.`)
+    return
+  }
 
   const oldFont = (await getAllStoredFonts()).find(f => f.family === oldFamily)
   if (!oldFont) return
@@ -262,11 +273,6 @@ label {
   white-space: nowrap;
 }
 
-.font-option-upload {
-  color: var(--accent-color, #30b9f5);
-  font-weight: 500;
-}
-
 .font-option-item {
   white-space: nowrap;
 }
@@ -279,6 +285,21 @@ label {
   color: var(--text-primary);
   opacity: 0.5;
   padding: 4px 0;
+}
+
+.font-upload-footer {
+  padding: 6px 8px;
+  color: var(--accent-color, #30b9f5);
+  font-weight: 500;
+  cursor: pointer;
+  border-top: 1px solid var(--text-primary);
+  border-top-color: color-mix(in srgb, var(--text-primary) 15%, transparent);
+  font-size: 13px;
+}
+
+.font-upload-footer:hover {
+  background: var(--text-primary);
+  background-color: color-mix(in srgb, var(--text-primary) 8%, transparent);
 }
 </style>
 
