@@ -4,6 +4,48 @@ import { PAGE_SIZES } from '../utils/constants'
 import { getAllStoredFonts } from '../utils/storage'
 import { fontFamilyCSS } from '../utils/css'
 
+// CSS as raw strings — inlined into the print iframe instead of <link> tags
+import katexCSS from 'katex/dist/katex.min.css?raw'
+import gmCSS from 'github-markdown-css/github-markdown-light.css?raw'
+import hlCSS from 'highlight.js/styles/github.min.css?raw'
+
+// paged.polyfill is copied to vendor/ via viteStaticCopy (not duplicated in assets)
+
+// KaTeX fonts as hashed asset URLs — avoid duplicating the 60 files that
+// Vite already extracts into dist/assets/ via the main app's CSS import.
+const kaTeXFonts = import.meta.glob('/node_modules/katex/dist/fonts/*', {
+  eager: true, query: '?url', import: 'default'
+}) as Record<string, string>
+
+// @fontsource fonts as hashed asset URLs — same reasoning, avoids duplication.
+const fontSourceFonts = import.meta.glob([
+  '/node_modules/@fontsource/open-sans/files/open-sans-latin-*-normal.woff2',
+  '/node_modules/@fontsource/roboto/files/roboto-latin-*-normal.woff2',
+  '/node_modules/@fontsource/montserrat/files/montserrat-latin-*-normal.woff2',
+  '/node_modules/@fontsource/inter/files/inter-latin-*-normal.woff2',
+  '/node_modules/@fontsource/lora/files/lora-latin-*-normal.woff2',
+  '/node_modules/@fontsource/lato/files/lato-latin-*-normal.woff2',
+  '/node_modules/@fontsource/source-code-pro/files/source-code-pro-latin-*-normal.woff2',
+], {
+  eager: true, query: '?url', import: 'default'
+}) as Record<string, string>
+
+// Build a filename → hashed-URL map so we can rewrite the KaTeX CSS font references.
+const kaTeXFontMap: Record<string, string> = {}
+for (const [filePath, url] of Object.entries(kaTeXFonts)) {
+  kaTeXFontMap[filePath.split('/').pop()!] = url
+}
+
+// Pre-process KaTeX CSS: replace url(fonts/KaTeX_*.woff2) with the hashed asset URLs.
+// This lets the inlined CSS find the fonts in dist/assets/ instead of dist/vendor/.
+const processedKaTeXCSS = katexCSS.replace(
+  /url\(fonts\/([^)]+)\)/g,
+  (match, fontName: string) => {
+    const url = kaTeXFontMap[fontName]
+    return url ? `url(${url})` : match
+  }
+)
+
 const FONT_LOCAL_CONFIG: Record<string, { pkg: string; weights: number[] }> = {
   'Open Sans': { pkg: 'open-sans', weights: [400, 600, 700] },
   'Roboto': { pkg: 'roboto', weights: [400, 600, 700] },
@@ -17,10 +59,12 @@ const FONT_LOCAL_CONFIG: Record<string, { pkg: string; weights: number[] }> = {
 function getLocalFontCSS(font: string): string {
   const config = FONT_LOCAL_CONFIG[font]
   if (!config) return ''
-  const base = import.meta.env.BASE_URL
-  return config.weights.map(w =>
-    `@font-face { font-family: '${font}'; font-style: normal; font-weight: ${w}; src: url('${base}vendor/fonts/${config.pkg}/files/${config.pkg}-latin-${w}-normal.woff2') format('woff2'); }`
-  ).join('\n')
+  return config.weights.map(w => {
+    const globKey = `/node_modules/@fontsource/${config.pkg}/files/${config.pkg}-latin-${w}-normal.woff2`
+    const url = fontSourceFonts[globKey]
+    if (!url) return ''
+    return `@font-face { font-family: '${font}'; font-style: normal; font-weight: ${w}; src: url('${url}') format('woff2'); }`
+  }).filter(Boolean).join('\n')
 }
 
 function blobToDataUri(blob: Blob): Promise<string> {
@@ -53,19 +97,6 @@ async function getFontCSS(font: string): Promise<string> {
   }
 
   return getLocalFontCSS(font)
-}
-
-async function waitForStylesheets(doc: Document): Promise<void> {
-  const links = Array.from(doc.querySelectorAll('link[rel="stylesheet"]'))
-  if (links.length === 0) return Promise.resolve()
-  return Promise.all(links.map(el => {
-    const link = el as HTMLLinkElement
-    return new Promise<void>(resolve => {
-      if (link.sheet) { resolve(); return }
-      link.onload = () => resolve()
-      link.onerror = () => resolve()
-    })
-  })).then(() => undefined)
 }
 
 function isAndroid(): boolean {
@@ -130,6 +161,9 @@ export function usePDF() {
       const effectiveFontSize = Math.round(fontSize * contentScale * 100) / 100
 
       const css = `
+        ${processedKaTeXCSS}
+        ${gmCSS}
+        ${hlCSS}
         ${fontCSS}
 
         @page {
@@ -197,22 +231,17 @@ export function usePDF() {
         }
       `
 
-      const base = import.meta.env.BASE_URL
-
       const htmlContent = `<!DOCTYPE html>
 <html>
 <head>
   <meta charset="utf-8">
-  <link rel="stylesheet" href="${base}vendor/github-markdown-light.css">
-  <link rel="stylesheet" href="${base}vendor/katex.min.css">
-  <link rel="stylesheet" href="${base}vendor/github.min.css">
   <style>${css}</style>
   <script>
     window.PagedConfig = {
       after: function() { window.__pagedReady = true; }
     };
   </script>
-  <script src="${base}vendor/paged.polyfill.js"></script>
+  <script src="${import.meta.env.BASE_URL}vendor/paged.polyfill.js"></script>
 </head>
 <body${dirAttr}>
   <div class="markdown-body">${renderedHtml}</div>
@@ -229,7 +258,6 @@ export function usePDF() {
 
         printWindow.document.write(htmlContent)
         printWindow.document.close()
-        await waitForStylesheets(printWindow.document)
         await waitForPagedjs(printWindow)
 
         printWindow.addEventListener('beforeprint', () => {
@@ -245,7 +273,6 @@ export function usePDF() {
       doc.open()
       doc.write(htmlContent)
       doc.close()
-      await waitForStylesheets(doc)
       await waitForPagedjs(iframe.contentWindow!)
 
       iframe.contentWindow!.addEventListener('beforeprint', () => {
