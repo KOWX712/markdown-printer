@@ -44,6 +44,8 @@
           @update:model-value="$emit('update:margin', $event)"
         />
 
+        <PageSizeSelector :model-value="pageSize" @update:model-value="$emit('update:pageSize', $event)" />
+
         <!-- Orientation toggle -->
         <Button
           severity="info"
@@ -58,7 +60,6 @@
 
         <span class="separator"></span>
 
-        <PageSizeSelector :model-value="pageSize" @update:model-value="$emit('update:pageSize', $event)" />
         <FontPicker :model-value="font" @update:model-value="$emit('update:font', $event)" />
 
         <!-- Content scale slider (A4-relative: 100% = A4 base) -->
