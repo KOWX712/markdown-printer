@@ -5,7 +5,7 @@
       <span class="separator">|</span>
       <span class="stat">{{ charCount }} chars</span>
       <span class="separator">|</span>
-      <button class="ai-status" :class="{ disabled: !llmEnabled }" @click="$emit('open-ai-settings')" :title="llmEnabled ? (llmConnected ? 'AI connected' : 'AI error') : 'AI disabled — click to configure'">
+      <button ref="aiButtonRef" class="ai-status" :class="{ disabled: !llmEnabled }" @click="$emit('open-ai-settings')" :title="llmEnabled ? (llmConnected ? 'AI connected' : 'AI error') : 'AI disabled — click to configure'">
         <span class="ai-dot" :class="!llmEnabled ? 'off' : (llmConnected ? 'connected' : 'error')"></span>
         <span class="ai-label">{{ llmEnabled ? llmModel : 'AI Off' }}</span>
       </button>
@@ -66,12 +66,16 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { ref, computed } from 'vue'
 import { PAGE_SIZES, getScaleRange } from '../utils/constants'
 import type { ViewMode } from '../utils/types'
 import { ZoomIn, ZoomOut, FileEdit, Eye, Columns2 } from '@lucide/vue'
 import Button from 'primevue/button'
 import Slider from 'primevue/slider'
+
+const aiButtonRef = ref<HTMLButtonElement>()
+
+defineExpose({ aiButtonRef })
 
 const props = defineProps<{
   content: string

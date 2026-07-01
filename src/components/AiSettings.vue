@@ -1,85 +1,91 @@
 <template>
-  <Dialog v-model:visible="visible" header="AI Autocomplete Settings" modal :style="{ width: '480px' }">
-    <div class="ai-settings">
-      <div class="field">
-        <label for="ai-endpoint">API Endpoint</label>
-        <InputText id="ai-endpoint" v-model="form.endpoint" placeholder="https://api.openai.com" class="w-full" />
-      </div>
-      <div class="field">
-        <label for="ai-apikey">API Key</label>
-        <InputText
-          id="ai-apikey"
-          v-model="form.apiKey"
-          type="password"
-          :placeholder="hasSavedKey ? '•••••••• (saved)' : 'sk-...'"
-          class="w-full"
-        />
-        <small class="field-hint">Your key is stored locally in your browser and is never shared.</small>
-      </div>
-      <div class="field">
-        <label for="ai-model">Model</label>
-        <div class="model-row">
-          <Select
-            id="ai-model"
-            v-model="form.model"
-            :options="models"
-            option-value="name"
-            option-label="name"
-            placeholder="Select or type a model"
-            class="model-select"
-            :loading="fetchingModels"
-            :disabled="!form.endpoint || !getEffectiveApiKey()"
-            filter
-            :filter-fields="['name']"
-            :show-clear="false"
+  <div class="ai-settings-wrapper">
+    <Popover ref="popoverRef" @hide="onHide" :dismissable="true" :closeOnEscape="true">
+      <div class="ai-settings">
+        <div class="ai-settings-header">AI Autocomplete Settings</div>
+        <div class="field">
+          <label for="ai-endpoint">API Endpoint</label>
+          <InputText id="ai-endpoint" v-model="form.endpoint" placeholder="https://api.openai.com" class="w-full" />
+        </div>
+        <div class="field">
+          <label for="ai-apikey">API Key</label>
+          <InputText
+            id="ai-apikey"
+            v-model="form.apiKey"
+            type="password"
+            :placeholder="hasSavedKey ? '•••••••• (saved)' : 'sk-...'"
+            class="w-full"
           />
+          <small class="field-hint">Your key is stored locally in your browser and is never shared.</small>
+        </div>
+        <div class="field">
+          <label for="ai-model">Model</label>
+          <div class="model-row">
+            <Select
+              id="ai-model"
+              v-model="form.model"
+              :options="models"
+              option-value="name"
+              option-label="name"
+              placeholder="Select or type a model"
+              class="model-select"
+              :loading="fetchingModels"
+              :disabled="!form.endpoint || !getEffectiveApiKey()"
+              filter
+              :filter-fields="['name']"
+              :show-clear="false"
+            />
+            <Button
+              icon="pi pi-refresh"
+              severity="secondary"
+              :loading="fetchingModels"
+              :disabled="!form.endpoint || !getEffectiveApiKey()"
+              @click="loadModels"
+              title="Fetch available models"
+            />
+          </div>
+        </div>
+        <div class="field row">
+          <label>Enable AI Autocomplete</label>
+          <ToggleSwitch v-model="form.enabled" />
+        </div>
+        <div class="test-row">
           <Button
-            icon="pi pi-refresh"
+            label="Test Connection"
             severity="secondary"
             size="small"
-            :loading="fetchingModels"
-            :disabled="!form.endpoint || !getEffectiveApiKey()"
-            @click="loadModels"
-            title="Fetch available models"
+            :loading="testing"
+            :disabled="!form.endpoint || !getEffectiveApiKey() || !form.model"
+            @click="testConnection"
           />
+          <span v-if="testResult === 'success'" class="test-success">Connected</span>
+          <span v-else-if="testResult === 'error'" class="test-error">{{ testError }}</span>
+        </div>
+        <div v-if="testResult === 'error' && testError.includes('CORS')" class="cors-hint">
+          <strong>CORS Error:</strong> The API server must include <code>Access-Control-Allow-Origin</code> headers to allow browser requests. Contact your API provider to enable CORS.
+        </div>
+        <div class="ai-settings-footer">
+          <Button label="Cancel" severity="secondary" size="small" text @click="visible = false" />
+          <Button label="Save" size="small" :disabled="!form.endpoint || !getEffectiveApiKey() || !form.model" @click="save" />
         </div>
       </div>
-      <div class="field row">
-        <label>Enable AI Autocomplete</label>
-        <ToggleSwitch v-model="form.enabled" />
-      </div>
-      <div class="test-row">
-        <Button
-          label="Test Connection"
-          severity="secondary"
-          size="small"
-          :loading="testing"
-          :disabled="!form.endpoint || !getEffectiveApiKey() || !form.model"
-          @click="testConnection"
-        />
-        <span v-if="testResult === 'success'" class="test-success">Connected</span>
-        <span v-else-if="testResult === 'error'" class="test-error">{{ testError }}</span>
-      </div>
-      <div v-if="testResult === 'error' && testError.includes('CORS')" class="cors-hint">
-        <strong>CORS Error:</strong> The API server must include <code>Access-Control-Allow-Origin</code> headers to allow browser requests. Contact your API provider to enable CORS.
-      </div>
-    </div>
-    <template #footer>
-      <Button label="Cancel" severity="secondary" text @click="visible = false" />
-      <Button label="Save" :disabled="!form.endpoint || !getEffectiveApiKey() || !form.model" @click="save" />
-    </template>
-  </Dialog>
+    </Popover>
+  </div>
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, watch } from 'vue'
-import Dialog from 'primevue/dialog'
+import { ref, reactive, watch, nextTick } from 'vue'
+import Popover from 'primevue/popover'
 import InputText from 'primevue/inputtext'
 import ToggleSwitch from 'primevue/toggleswitch'
 import Select from 'primevue/select'
 import Button from 'primevue/button'
 import { loadLlmConfig, saveLlmConfig, isLlmEnabled, setLlmEnabled } from '../utils/storage'
 import { streamCompletion, fetchModels } from '../services/llm'
+
+const props = defineProps<{
+  triggerEl?: HTMLElement | null
+}>()
 
 const visible = defineModel<boolean>({ default: false })
 
@@ -102,7 +108,10 @@ const testError = ref('')
 const hasSavedKey = ref(false)
 let savedApiKey = ''
 
+const popoverRef = ref()
+
 watch(visible, async (v) => {
+  await nextTick()
   if (v) {
     testResult.value = null
     testError.value = ''
@@ -123,8 +132,28 @@ watch(visible, async (v) => {
       }
     }
     form.enabled = isLlmEnabled()
+
+    // Show popover anchored to the trigger element
+    if (props.triggerEl && popoverRef.value) {
+      const rect = props.triggerEl.getBoundingClientRect()
+      const event = new MouseEvent('click', {
+        bubbles: true,
+        cancelable: true,
+        clientX: rect.left + rect.width / 2,
+        clientY: rect.top,
+      })
+      Object.defineProperty(event, 'target', { value: props.triggerEl })
+      Object.defineProperty(event, 'currentTarget', { value: props.triggerEl })
+      popoverRef.value.show(event)
+    }
+  } else if (!v && popoverRef.value) {
+    popoverRef.value.hide()
   }
 })
+
+function onHide() {
+  visible.value = false
+}
 
 function getEffectiveApiKey(): string {
   return form.apiKey || savedApiKey
@@ -190,6 +219,21 @@ async function save() {
   display: flex;
   flex-direction: column;
   gap: 16px;
+  width: 480px;
+  max-width: 90dvw;
+}
+
+.ai-settings-header {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 4px;
+}
+
+.ai-settings-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
 }
 
 .field {

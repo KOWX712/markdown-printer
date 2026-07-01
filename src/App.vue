@@ -83,6 +83,7 @@
         </div>
 
         <FooterBar
+          ref="footerRef"
           :content="activeTab?.content || ''"
           :selected-text="selectedText"
           :scale="settings.scale"
@@ -101,7 +102,7 @@
     </template>
 
     <PrivacyPolicy v-model="showPrivacy" />
-    <AiSettings v-model="showAiSettings" @saved="refreshLlmState" />
+    <AiSettings v-model="showAiSettings" :trigger-el="footerRef?.aiButtonRef" @saved="refreshLlmState" />
   </div>
 </template>
 
@@ -123,6 +124,8 @@ import { useImages } from './composables/useImages'
 import { loadSettings, saveSettings, loadLlmConfig, isLlmEnabled } from './utils/storage'
 import { PAGE_SIZES, getScaleRange, getContentScaleFactor } from './utils/constants'
 import type { EditorSettings, Tab } from './utils/types'
+
+const footerRef = ref<InstanceType<typeof FooterBar>>()
 
 // Tab management
 const {
